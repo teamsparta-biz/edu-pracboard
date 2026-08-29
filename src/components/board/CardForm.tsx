@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -84,17 +84,7 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
           </div>
 
           <div>
-            <label className="text-sm font-medium">내용</label>
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="자료에 대한 설명을 입력하세요"
-              className="mt-1.5 min-h-24"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">이미지</label>
+            <label className="text-sm font-medium">업로드</label>
             <input
               ref={fileInputRef}
               type="file"
@@ -121,10 +111,23 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
                 onClick={() => fileInputRef.current?.click()}
                 className="mt-1.5 w-full h-28 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:border-foreground/30 transition-colors"
               >
-                <ImagePlus className="w-5 h-5" />
-                <span className="text-sm">이미지 업로드</span>
+                <Upload className="w-5 h-5" />
+                <span className="text-sm">업로드</span>
               </button>
             )}
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              이미지, 비디오, 오디오, 링크 또는 파일을 추가할 수 있어요.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">내용</label>
+            <Textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="아름다운 내용을 적어보세요..."
+              className="mt-1.5 min-h-24"
+            />
           </div>
 
           <div>

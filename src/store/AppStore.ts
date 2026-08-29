@@ -25,9 +25,16 @@ export type Lesson = {
   description: string;
 };
 
-export type Card = {
+export type Section = {
   id: string;
   lessonId: string;
+  order: number;
+  name: string;
+};
+
+export type Card = {
+  id: string;
+  sectionId: string;
   title: string;
   content: string;
   image?: string;
@@ -52,18 +59,24 @@ type AppState = {
   enterprises: Enterprise[];
   educations: Education[];
   lessons: Lesson[];
+  sections: Section[];
   cards: Card[];
 
   getEnterprise: (id?: string) => Enterprise | undefined;
   getEducation: (id?: string) => Education | undefined;
   getLesson: (id?: string) => Lesson | undefined;
+  getSection: (id?: string) => Section | undefined;
 
   getEducationsByEnterprise: (enterpriseId?: string) => Education[];
   getLessonsByEducation: (educationId?: string) => Lesson[];
-  getCardsByLesson: (lessonId?: string) => Card[];
+  getSectionsByLesson: (lessonId?: string) => Section[];
+  getCardsBySection: (sectionId?: string) => Card[];
+  getCardCountByLesson: (lessonId?: string) => number;
 
   addLesson: (educationId: string, data: NewLessonInput) => void;
-  addCard: (lessonId: string, data: NewCardInput) => void;
+  addSection: (lessonId: string, name: string) => string;
+  deleteSection: (sectionId: string) => void;
+  addCard: (sectionId: string, data: NewCardInput) => void;
   deleteCard: (cardId: string) => void;
 };
 
@@ -194,10 +207,18 @@ const seedLessons: Lesson[] = [
   },
 ];
 
+const seedSections: Section[] = [
+  { id: "section-onboarding-1-1", lessonId: "lesson-onboarding-1", order: 1, name: "교안 자료" },
+  { id: "section-onboarding-1-2", lessonId: "lesson-onboarding-1", order: 2, name: "수강생 게시판" },
+  { id: "section-onboarding-2-1", lessonId: "lesson-onboarding-2", order: 1, name: "수강생 게시판" },
+  { id: "section-onboarding-3-1", lessonId: "lesson-onboarding-3", order: 1, name: "수강생 게시판" },
+  { id: "section-onboarding-4-1", lessonId: "lesson-onboarding-4", order: 1, name: "수강생 게시판" },
+];
+
 const seedCards: Card[] = [
   {
     id: "card-1",
-    lessonId: "lesson-onboarding-1",
+    sectionId: "section-onboarding-1-1",
     title: "핵심 가치 5대 원칙",
     content:
       "신입사원이 꼭 알아야 할 5가지 핵심 가치를 한 장으로 정리했어요. 사람, 기술, 미래를 향한 우리의 약속.",
@@ -207,7 +228,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-2",
-    lessonId: "lesson-onboarding-1",
+    sectionId: "section-onboarding-1-2",
     title: "조직 문화 인포그래픽",
     content:
       "부서별 협업 구조와 커뮤니케이션 채널을 한눈에 볼 수 있는 자료입니다. 다운로드해서 활용하세요.",
@@ -217,7 +238,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-3",
-    lessonId: "lesson-onboarding-1",
+    sectionId: "section-onboarding-1-2",
     title: "온보딩 체크리스트",
     content:
       "입사 첫 주, 첫 달에 해야 할 일들을 정리했습니다. 멘토와 함께 하나씩 체크해 보세요.",
@@ -227,7 +248,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-4",
-    lessonId: "lesson-onboarding-1",
+    sectionId: "section-onboarding-1-2",
     title: "사내 포털 바로가기 모음",
     content:
       "사내 위키, 메일, 그룹웨어 등 자주 쓰는 포털 링크를 모아뒀습니다. 즐겨찾기 해두세요.",
@@ -237,7 +258,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-5",
-    lessonId: "lesson-onboarding-1",
+    sectionId: "section-onboarding-1-2",
     title: "팀 빌딩 워크숍 후기",
     content:
       "지난주 워크숍에서 진행했던 활동과 배운 점을 정리했습니다. 다음 워크숍 기획에도 참고해보세요.",
@@ -247,7 +268,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-6",
-    lessonId: "lesson-onboarding-2",
+    sectionId: "section-onboarding-2-1",
     title: "이메일 작성 가이드",
     content: "사내/외부 이메일 작성 시 지켜야 할 톤앤매너와 형식입니다.",
     author: "김교육",
@@ -255,7 +276,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-7",
-    lessonId: "lesson-onboarding-2",
+    sectionId: "section-onboarding-2-1",
     title: "회의 진행 템플릿",
     content: "효율적인 회의를 위한 아젠다·회의록 템플릿을 공유합니다.",
     link: "https://www.notion.so",
@@ -264,7 +285,7 @@ const seedCards: Card[] = [
   },
   {
     id: "card-8",
-    lessonId: "lesson-onboarding-4",
+    sectionId: "section-onboarding-4-1",
     title: "업무 자동화 도구 모음",
     content: "반복 업무를 줄여주는 사내 승인 도구 사용법입니다.",
     author: "박멘토",
@@ -278,11 +299,13 @@ export const useAppStore = create<AppState>()(
       enterprises: seedEnterprises,
       educations: seedEducations,
       lessons: seedLessons,
+      sections: seedSections,
       cards: seedCards,
 
       getEnterprise: (id) => get().enterprises.find((e) => e.id === id),
       getEducation: (id) => get().educations.find((e) => e.id === id),
       getLesson: (id) => get().lessons.find((l) => l.id === id),
+      getSection: (id) => get().sections.find((s) => s.id === id),
 
       getEducationsByEnterprise: (enterpriseId) =>
         get().educations.filter((e) => e.enterpriseId === enterpriseId),
@@ -290,30 +313,69 @@ export const useAppStore = create<AppState>()(
         get()
           .lessons.filter((l) => l.educationId === educationId)
           .sort((a, b) => a.order - b.order),
-      getCardsByLesson: (lessonId) =>
+      getSectionsByLesson: (lessonId) =>
         get()
-          .cards.filter((c) => c.lessonId === lessonId)
+          .sections.filter((s) => s.lessonId === lessonId)
+          .sort((a, b) => a.order - b.order),
+      getCardsBySection: (sectionId) =>
+        get()
+          .cards.filter((c) => c.sectionId === sectionId)
           .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)),
+      getCardCountByLesson: (lessonId) => {
+        const sectionIds = new Set(
+          get()
+            .sections.filter((s) => s.lessonId === lessonId)
+            .map((s) => s.id),
+        );
+        return get().cards.filter((c) => sectionIds.has(c.sectionId)).length;
+      },
 
       addLesson: (educationId, data) =>
         set((state) => {
           const order =
             state.lessons.filter((l) => l.educationId === educationId).length + 1;
+          const lessonId = nextId("lesson");
           const lesson: Lesson = {
-            id: nextId("lesson"),
+            id: lessonId,
             educationId,
             order,
             title: data.title,
             description: data.description ?? "",
           };
-          return { lessons: [...state.lessons, lesson] };
+          const section: Section = {
+            id: nextId("section"),
+            lessonId,
+            order: 1,
+            name: "수강생 게시판",
+          };
+          return {
+            lessons: [...state.lessons, lesson],
+            sections: [...state.sections, section],
+          };
         }),
 
-      addCard: (lessonId, data) =>
+      addSection: (lessonId, name) => {
+        const id = nextId("section");
+        set((state) => {
+          const order =
+            state.sections.filter((s) => s.lessonId === lessonId).length + 1;
+          const section: Section = { id, lessonId, order, name };
+          return { sections: [...state.sections, section] };
+        });
+        return id;
+      },
+
+      deleteSection: (sectionId) =>
+        set((state) => ({
+          sections: state.sections.filter((s) => s.id !== sectionId),
+          cards: state.cards.filter((c) => c.sectionId !== sectionId),
+        })),
+
+      addCard: (sectionId, data) =>
         set((state) => {
           const card: Card = {
             id: nextId("card"),
-            lessonId,
+            sectionId,
             title: data.title,
             content: data.content ?? "",
             image: data.image,

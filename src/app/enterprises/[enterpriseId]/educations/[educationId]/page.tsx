@@ -17,7 +17,7 @@ export default function Lessons() {
     getEnterprise,
     getEducation,
     getLessonsByEducation,
-    getCardsByLesson,
+    getCardCountByLesson,
     addLesson,
   } = useAppStore();
   const enterprise = getEnterprise(enterpriseId);
@@ -94,7 +94,7 @@ export default function Lessons() {
         ) : (
           <div className="space-y-3">
             {filtered.map((l) => {
-              const count = getCardsByLesson(l.id).length;
+              const count = getCardCountByLesson(l.id);
               return (
                 <Link
                   key={l.id}
