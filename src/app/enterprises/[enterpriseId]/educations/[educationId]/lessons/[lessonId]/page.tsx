@@ -139,12 +139,12 @@ export default function Board() {
           </div>
         </div>
 
-        <div className="relative mt-6 px-0 sm:px-12">
+        <div className="relative mt-6 px-0 sm:px-12 min-h-[340px]">
           <button
             onClick={() => hasPrev && setSectionIndex((i) => i - 1)}
             disabled={!hasPrev}
             aria-label="이전 섹션"
-            className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+            className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -152,7 +152,7 @@ export default function Board() {
             onClick={() => hasNext && setSectionIndex((i) => i + 1)}
             disabled={!hasNext}
             aria-label="다음 섹션"
-            className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+            className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -160,16 +160,6 @@ export default function Board() {
           {!section ? (
             <div className="text-center py-20 border-2 border-dashed border-white/15 rounded-2xl">
               <p className="text-white/50">아직 만들어진 섹션이 없어요.</p>
-            </div>
-          ) : cards.length === 0 ? (
-            <div className="text-center py-20 border-2 border-dashed border-white/15 rounded-2xl">
-              <p className="text-white/50">아직 올라온 자료가 없어요.</p>
-              <button
-                onClick={() => setCardFormOpen(true)}
-                className="mt-4 inline-flex items-center gap-2 text-white font-medium underline underline-offset-4"
-              >
-                <Plus className="w-4 h-4" /> 첫 자료 올리기
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
