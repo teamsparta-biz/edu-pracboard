@@ -75,7 +75,7 @@ export default function Board() {
 
   return (
     <div className="min-h-screen bg-[#591a2e]">
-      <div className="max-w-[1600px] mx-auto px-6 lg:px-10 py-10">
+      <div className="max-w-[1800px] mx-auto px-6 lg:px-12 py-10">
         <Breadcrumb
           variant="light"
           items={[
@@ -139,23 +139,25 @@ export default function Board() {
           </div>
         </div>
 
-        <div className="relative mt-6 px-0 sm:px-12 min-h-[340px]">
-          <button
-            onClick={() => hasPrev && setSectionIndex((i) => i - 1)}
-            disabled={!hasPrev}
-            aria-label="이전 섹션"
-            className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => hasNext && setSectionIndex((i) => i + 1)}
-            disabled={!hasNext}
-            aria-label="다음 섹션"
-            className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20 disabled:pointer-events-none"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        <div className="relative mt-6 px-0 sm:px-20 min-h-[340px]">
+          {hasPrev && (
+            <button
+              onClick={() => setSectionIndex((i) => i - 1)}
+              aria-label="이전 섹션"
+              className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+          {hasNext && (
+            <button
+              onClick={() => setSectionIndex((i) => i + 1)}
+              aria-label="다음 섹션"
+              className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
 
           {!section ? (
             <div className="text-center py-20 border-2 border-dashed border-white/15 rounded-2xl">
@@ -169,24 +171,28 @@ export default function Board() {
             </div>
           )}
 
-          <div className="mt-4 flex sm:hidden items-center justify-center gap-3">
-            <button
-              onClick={() => hasPrev && setSectionIndex((i) => i - 1)}
-              disabled={!hasPrev}
-              aria-label="이전 섹션"
-              className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white disabled:opacity-20"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => hasNext && setSectionIndex((i) => i + 1)}
-              disabled={!hasNext}
-              aria-label="다음 섹션"
-              className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white disabled:opacity-20"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          {(hasPrev || hasNext) && (
+            <div className="mt-4 flex sm:hidden items-center justify-center gap-3">
+              {hasPrev && (
+                <button
+                  onClick={() => setSectionIndex((i) => i - 1)}
+                  aria-label="이전 섹션"
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {hasNext && (
+                <button
+                  onClick={() => setSectionIndex((i) => i + 1)}
+                  aria-label="다음 섹션"
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
