@@ -17,9 +17,17 @@ export type Education = {
   period: string;
 };
 
-export type Lesson = {
+export type Round = {
   id: string;
   educationId: string;
+  order: number;
+  title: string;
+  description: string;
+};
+
+export type Lesson = {
+  id: string;
+  roundId: string;
   order: number;
   title: string;
   description: string;
@@ -50,6 +58,11 @@ type NewCardInput = {
   link?: string;
 };
 
+type NewRoundInput = {
+  title: string;
+  description?: string;
+};
+
 type NewLessonInput = {
   title: string;
   description?: string;
@@ -58,22 +71,27 @@ type NewLessonInput = {
 type AppState = {
   enterprises: Enterprise[];
   educations: Education[];
+  rounds: Round[];
   lessons: Lesson[];
   sections: Section[];
   cards: Card[];
 
   getEnterprise: (id?: string) => Enterprise | undefined;
   getEducation: (id?: string) => Education | undefined;
+  getRound: (id?: string) => Round | undefined;
   getLesson: (id?: string) => Lesson | undefined;
   getSection: (id?: string) => Section | undefined;
 
   getEducationsByEnterprise: (enterpriseId?: string) => Education[];
-  getLessonsByEducation: (educationId?: string) => Lesson[];
+  getRoundsByEducation: (educationId?: string) => Round[];
+  getLessonsByRound: (roundId?: string) => Lesson[];
   getSectionsByLesson: (lessonId?: string) => Section[];
   getCardsBySection: (sectionId?: string) => Card[];
   getCardCountByLesson: (lessonId?: string) => number;
+  getCardCountByRound: (roundId?: string) => number;
 
-  addLesson: (educationId: string, data: NewLessonInput) => void;
+  addRound: (educationId: string, data: NewRoundInput) => void;
+  addLesson: (roundId: string, data: NewLessonInput) => void;
   addSection: (lessonId: string, name: string) => string;
   deleteSection: (sectionId: string) => void;
   addCard: (sectionId: string, data: NewCardInput) => void;
@@ -176,34 +194,65 @@ const seedEducations: Education[] = [
   },
 ];
 
-const seedLessons: Lesson[] = [
+const seedRounds: Round[] = [
   {
-    id: "lesson-onboarding-1",
+    id: "round-onboarding-1",
     educationId: "edu-onboarding",
     order: 1,
     title: "조직 문화 이해하기",
     description: "핵심 가치와 조직 문화를 배웁니다",
   },
   {
-    id: "lesson-onboarding-2",
+    id: "round-onboarding-2",
     educationId: "edu-onboarding",
     order: 2,
     title: "비즈니스 매너와 소통",
     description: "직장인 필수 커뮤니케이션 스킬",
   },
   {
-    id: "lesson-onboarding-3",
+    id: "round-onboarding-3",
     educationId: "edu-onboarding",
     order: 3,
     title: "데이터 기반 의사결정",
     description: "데이터 리터러시 입문",
   },
   {
-    id: "lesson-onboarding-4",
+    id: "round-onboarding-4",
     educationId: "edu-onboarding",
     order: 4,
     title: "업무 자동화 워크플로우",
     description: "반복 업무를 줄이는 도구 활용법",
+  },
+];
+
+const seedLessons: Lesson[] = [
+  {
+    id: "lesson-onboarding-1",
+    roundId: "round-onboarding-1",
+    order: 1,
+    title: "1차시",
+    description: "핵심 가치와 조직 문화 학습 자료",
+  },
+  {
+    id: "lesson-onboarding-2",
+    roundId: "round-onboarding-2",
+    order: 1,
+    title: "1차시",
+    description: "커뮤니케이션 스킬 학습 자료",
+  },
+  {
+    id: "lesson-onboarding-3",
+    roundId: "round-onboarding-3",
+    order: 1,
+    title: "1차시",
+    description: "데이터 리터러시 학습 자료",
+  },
+  {
+    id: "lesson-onboarding-4",
+    roundId: "round-onboarding-4",
+    order: 1,
+    title: "1차시",
+    description: "업무 자동화 도구 학습 자료",
   },
 ];
 
@@ -298,20 +347,26 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       enterprises: seedEnterprises,
       educations: seedEducations,
+      rounds: seedRounds,
       lessons: seedLessons,
       sections: seedSections,
       cards: seedCards,
 
       getEnterprise: (id) => get().enterprises.find((e) => e.id === id),
       getEducation: (id) => get().educations.find((e) => e.id === id),
+      getRound: (id) => get().rounds.find((r) => r.id === id),
       getLesson: (id) => get().lessons.find((l) => l.id === id),
       getSection: (id) => get().sections.find((s) => s.id === id),
 
       getEducationsByEnterprise: (enterpriseId) =>
         get().educations.filter((e) => e.enterpriseId === enterpriseId),
-      getLessonsByEducation: (educationId) =>
+      getRoundsByEducation: (educationId) =>
         get()
-          .lessons.filter((l) => l.educationId === educationId)
+          .rounds.filter((r) => r.educationId === educationId)
+          .sort((a, b) => a.order - b.order),
+      getLessonsByRound: (roundId) =>
+        get()
+          .lessons.filter((l) => l.roundId === roundId)
           .sort((a, b) => a.order - b.order),
       getSectionsByLesson: (lessonId) =>
         get()
@@ -329,15 +384,41 @@ export const useAppStore = create<AppState>()(
         );
         return get().cards.filter((c) => sectionIds.has(c.sectionId)).length;
       },
+      getCardCountByRound: (roundId) => {
+        const lessonIds = new Set(
+          get()
+            .lessons.filter((l) => l.roundId === roundId)
+            .map((l) => l.id),
+        );
+        const sectionIds = new Set(
+          get()
+            .sections.filter((s) => lessonIds.has(s.lessonId))
+            .map((s) => s.id),
+        );
+        return get().cards.filter((c) => sectionIds.has(c.sectionId)).length;
+      },
 
-      addLesson: (educationId, data) =>
+      addRound: (educationId, data) =>
         set((state) => {
           const order =
-            state.lessons.filter((l) => l.educationId === educationId).length + 1;
+            state.rounds.filter((r) => r.educationId === educationId).length + 1;
+          const round: Round = {
+            id: nextId("round"),
+            educationId,
+            order,
+            title: data.title,
+            description: data.description ?? "",
+          };
+          return { rounds: [...state.rounds, round] };
+        }),
+
+      addLesson: (roundId, data) =>
+        set((state) => {
+          const order = state.lessons.filter((l) => l.roundId === roundId).length + 1;
           const lessonId = nextId("lesson");
           const lesson: Lesson = {
             id: lessonId,
-            educationId,
+            roundId,
             order,
             title: data.title,
             description: data.description ?? "",
@@ -391,6 +472,6 @@ export const useAppStore = create<AppState>()(
           cards: state.cards.filter((c) => c.id !== cardId),
         })),
     }),
-    { name: "praboard-store" },
+    { name: "praboard-store-v2" },
   ),
 );

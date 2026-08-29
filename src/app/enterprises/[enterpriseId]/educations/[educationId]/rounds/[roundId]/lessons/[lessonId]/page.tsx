@@ -18,14 +18,16 @@ import {
 } from "lucide-react";
 
 export default function Board() {
-  const { enterpriseId, educationId, lessonId } = useParams<{
+  const { enterpriseId, educationId, roundId, lessonId } = useParams<{
     enterpriseId: string;
     educationId: string;
+    roundId: string;
     lessonId: string;
   }>();
   const {
     getEnterprise,
     getEducation,
+    getRound,
     getLesson,
     getSectionsByLesson,
     getCardsBySection,
@@ -42,6 +44,7 @@ export default function Board() {
 
   const enterprise = getEnterprise(enterpriseId);
   const education = getEducation(educationId);
+  const round = getRound(roundId);
   const lesson = getLesson(lessonId);
   const sections = getSectionsByLesson(lessonId);
 
@@ -49,7 +52,7 @@ export default function Board() {
     setSectionIndex((i) => Math.min(i, Math.max(sections.length - 1, 0)));
   }, [sections.length]);
 
-  if (!lesson || !education || !enterprise) {
+  if (!lesson || !round || !education || !enterprise) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
         차시를 찾을 수 없습니다.
@@ -82,6 +85,10 @@ export default function Board() {
             { label: "기업", to: "/" },
             { label: enterprise.name, to: `/enterprises/${enterpriseId}` },
             { label: education.name, to: `/enterprises/${enterpriseId}/educations/${educationId}` },
+            {
+              label: `${round.order}회차 · ${round.title}`,
+              to: `/enterprises/${enterpriseId}/educations/${educationId}/rounds/${roundId}`,
+            },
             { label: `${lesson.order}차시` },
           ]}
         />
@@ -89,7 +96,7 @@ export default function Board() {
         <div className="mt-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <div className="text-sm text-white/60">
-              {enterprise.name} · {education.name}
+              {enterprise.name} · {education.name} · {round.order}회차 {round.title}
             </div>
             <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-white">
               {lesson.order}차시 · {lesson.title}

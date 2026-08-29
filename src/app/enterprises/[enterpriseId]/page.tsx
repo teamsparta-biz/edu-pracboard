@@ -8,7 +8,7 @@ import { Calendar, BookOpen } from "lucide-react";
 
 export default function Educations() {
   const { enterpriseId } = useParams<{ enterpriseId: string }>();
-  const { getEnterprise, getEducationsByEnterprise, getLessonsByEducation } =
+  const { getEnterprise, getEducationsByEnterprise, getRoundsByEducation } =
     useAppStore();
   const enterprise = getEnterprise(enterpriseId);
   const educations = getEducationsByEnterprise(enterpriseId);
@@ -33,7 +33,7 @@ export default function Educations() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {educations.map((ed) => {
-            const lessons = getLessonsByEducation(ed.id);
+            const rounds = getRoundsByEducation(ed.id);
             return (
               <Link
                 key={ed.id}
@@ -50,7 +50,7 @@ export default function Educations() {
                     <Calendar className="w-3.5 h-3.5" /> {ed.period}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5" /> {lessons.length}차시
+                    <BookOpen className="w-3.5 h-3.5" /> {rounds.length}회차
                   </span>
                 </div>
               </Link>
