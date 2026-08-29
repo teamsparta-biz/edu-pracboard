@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 type LessonFormData = {
-  title: string;
+  title?: string;
   description?: string;
 };
 
@@ -23,6 +23,7 @@ type Props = {
   onSubmit: (data: LessonFormData) => void;
   nextOrder: number;
   unitLabel?: string;
+  withTitle?: boolean;
 };
 
 export default function LessonForm({
@@ -31,6 +32,7 @@ export default function LessonForm({
   onSubmit,
   nextOrder,
   unitLabel = "차시",
+  withTitle = true,
 }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -46,8 +48,11 @@ export default function LessonForm({
   }
 
   function handleSubmit() {
-    if (!title.trim()) return;
-    onSubmit({ title: title.trim(), description: description.trim() || undefined });
+    if (withTitle && !title.trim()) return;
+    onSubmit({
+      title: withTitle ? title.trim() : undefined,
+      description: description.trim() || undefined,
+    });
     reset();
     onClose();
   }
@@ -60,16 +65,18 @@ export default function LessonForm({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">제목 *</label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`${unitLabel} 제목을 입력하세요`}
-              className="mt-1.5"
-              autoFocus
-            />
-          </div>
+          {withTitle && (
+            <div>
+              <label className="text-sm font-medium">제목 *</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`${unitLabel} 제목을 입력하세요`}
+                className="mt-1.5"
+                autoFocus
+              />
+            </div>
+          )}
 
           <div>
             <label className="text-sm font-medium">설명</label>
@@ -78,6 +85,7 @@ export default function LessonForm({
               onChange={(e) => setDescription(e.target.value)}
               placeholder={`${unitLabel}에 대한 설명을 입력하세요`}
               className="mt-1.5 min-h-20"
+              autoFocus={!withTitle}
             />
           </div>
         </div>
@@ -86,7 +94,7 @@ export default function LessonForm({
           <Button variant="ghost" onClick={handleClose}>
             취소
           </Button>
-          <Button onClick={handleSubmit} disabled={!title.trim()}>
+          <Button onClick={handleSubmit} disabled={withTitle && !title.trim()}>
             만들기
           </Button>
         </DialogFooter>

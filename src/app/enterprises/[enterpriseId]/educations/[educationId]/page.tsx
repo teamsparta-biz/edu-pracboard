@@ -121,7 +121,7 @@ export default function Rounds() {
       <LessonForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSubmit={(data) => addRound(educationId, data)}
+        onSubmit={(data) => addRound(educationId, { title: data.title ?? "", description: data.description })}
         nextOrder={rounds.length + 1}
         unitLabel="회차"
       />

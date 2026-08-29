@@ -29,7 +29,6 @@ export type Lesson = {
   id: string;
   roundId: string;
   order: number;
-  title: string;
   description: string;
 };
 
@@ -64,7 +63,6 @@ type NewRoundInput = {
 };
 
 type NewLessonInput = {
-  title: string;
   description?: string;
 };
 
@@ -230,28 +228,24 @@ const seedLessons: Lesson[] = [
     id: "lesson-onboarding-1",
     roundId: "round-onboarding-1",
     order: 1,
-    title: "1차시",
     description: "핵심 가치와 조직 문화 학습 자료",
   },
   {
     id: "lesson-onboarding-2",
     roundId: "round-onboarding-2",
     order: 1,
-    title: "1차시",
     description: "커뮤니케이션 스킬 학습 자료",
   },
   {
     id: "lesson-onboarding-3",
     roundId: "round-onboarding-3",
     order: 1,
-    title: "1차시",
     description: "데이터 리터러시 학습 자료",
   },
   {
     id: "lesson-onboarding-4",
     roundId: "round-onboarding-4",
     order: 1,
-    title: "1차시",
     description: "업무 자동화 도구 학습 자료",
   },
 ];
@@ -420,7 +414,6 @@ export const useAppStore = create<AppState>()(
             id: lessonId,
             roundId,
             order,
-            title: data.title,
             description: data.description ?? "",
           };
           const section: Section = {

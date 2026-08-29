@@ -99,7 +99,7 @@ export default function Board() {
               {enterprise.name} · {education.name} · {round.order}회차 {round.title}
             </div>
             <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-white">
-              {lesson.order}차시 · {lesson.title}
+              {lesson.order}차시
             </h1>
             <p className="mt-2 text-white/60">{lesson.description}</p>
           </div>

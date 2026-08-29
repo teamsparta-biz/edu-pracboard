@@ -39,10 +39,7 @@ export default function Lessons() {
 
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? lessons.filter(
-        (l) =>
-          l.title.toLowerCase().includes(q) || l.description.toLowerCase().includes(q),
-      )
+    ? lessons.filter((l) => l.description.toLowerCase().includes(q))
     : lessons;
 
   return (
@@ -76,7 +73,7 @@ export default function Lessons() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="차시 검색 (제목, 설명)"
+            placeholder="차시 검색 (설명)"
             className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-input bg-white text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -109,7 +106,7 @@ export default function Lessons() {
                     {l.order}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="font-semibold text-base truncate">{l.title}</h2>
+                    <h2 className="font-semibold text-base truncate">{l.order}차시</h2>
                     <p className="text-sm text-muted-foreground truncate">{l.description}</p>
                   </div>
                   <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -127,6 +124,7 @@ export default function Lessons() {
         onClose={() => setFormOpen(false)}
         onSubmit={(data) => addLesson(roundId, data)}
         nextOrder={lessons.length + 1}
+        withTitle={false}
       />
     </div>
   );
