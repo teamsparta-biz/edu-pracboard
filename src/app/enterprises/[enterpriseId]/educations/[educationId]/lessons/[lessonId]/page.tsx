@@ -75,7 +75,7 @@ export default function Board() {
 
   return (
     <div className="min-h-screen bg-[#591a2e]">
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-[1600px] mx-auto px-6 lg:px-10 py-10">
         <Breadcrumb
           variant="light"
           items={[
@@ -172,7 +172,7 @@ export default function Board() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
               {cards.map((c) => (
                 <BoardCard key={c.id} card={c} onDelete={deleteCard} onOpen={setSelected} />
               ))}
