@@ -6,7 +6,8 @@ import type { Card } from "@/store/AppStore";
 
 type Props = {
   card: Card;
-  onDelete: (cardId: string) => void;
+  // 삭제 권한이 없으면 넘기지 않는다
+  onDelete?: (cardId: string) => void;
   onOpen: (card: Card) => void;
 };
 
@@ -16,16 +17,18 @@ export default function BoardCard({ card, onDelete, onOpen }: Props) {
       onClick={() => onOpen(card)}
       className="group relative bg-white rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow cursor-pointer flex flex-col"
     >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(card.id);
-        }}
-        className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-        aria-label="삭제"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      {onDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(card.id);
+          }}
+          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+          aria-label="삭제"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       <div className="relative h-44 bg-muted flex items-center justify-center overflow-hidden">
         {card.image ? (
@@ -57,14 +60,14 @@ export default function BoardCard({ card, onDelete, onOpen }: Props) {
             <span className="truncate">{card.link}</span>
           </a>
         )}
-        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-foreground">
+        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="w-5 h-5 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-foreground">
               {card.author.charAt(0)}
             </span>
-            {card.author}
+            <span className="truncate">{card.author}</span>
           </span>
-          <span>{card.createdAt}</span>
+          <span className="shrink-0">{card.createdAt.slice(5)}</span>
         </div>
       </div>
     </div>

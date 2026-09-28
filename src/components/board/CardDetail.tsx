@@ -12,7 +12,7 @@ import type { Card } from "@/store/AppStore";
 type Props = {
   card: Card | null;
   onClose: () => void;
-  onDelete: (cardId: string) => void;
+  onDelete?: (cardId: string) => void;
 };
 
 export default function CardDetail({ card, onClose, onDelete }: Props) {
@@ -35,16 +35,18 @@ export default function CardDetail({ card, onClose, onDelete }: Props) {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  onDelete(card.id);
-                  onClose();
-                }}
-                className="p-1.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                aria-label="삭제"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {onDelete && (
+                <button
+                  onClick={() => {
+                    onDelete(card.id);
+                    onClose();
+                  }}
+                  className="p-1.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                  aria-label="삭제"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {card.image && (
