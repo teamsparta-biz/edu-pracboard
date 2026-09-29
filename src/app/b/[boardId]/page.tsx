@@ -1,12 +1,14 @@
 import { Lock, LogIn } from "lucide-react";
 import { joinBoard } from "@/app/actions/auth";
+import { addInstructor, removeInstructor } from "@/app/actions/admin";
 import { getSessionUser } from "@/lib/auth";
-import { getBoardContents, getBoardPreview, getBoardRole, type BoardContext } from "@/lib/data";
+import { getBoardContents, getBoardPreview, getBoardRole, listInstructors, type BoardContext } from "@/lib/data";
 import { educationTitle } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
 import BoardView from "@/components/board/BoardView";
+import EmailRoster from "@/components/hierarchy/EmailRoster";
 import JoinBoard from "@/components/board/JoinBoard";
 
 const boardTitle = ({ round, lesson, division, education }: BoardContext) => ({
@@ -26,7 +28,18 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
       return (
         <div className="min-h-screen flex flex-col bg-[#591a2e]">
           <AppHeader user={user} roleLabel={roleLabel[role]} variant="light" />
-          <BoardView {...contents} role={role} userId={user.id} />
+          <BoardView {...contents} role={role} userId={user.id}>
+            {role === "admin" && (
+              <EmailRoster
+                title="강사"
+                description="등록된 이메일로 로그인하면 이 보드의 섹션과 카드를 관리할 수 있어요. axhub 배정은 자동으로 추가돼요."
+                placeholder="강사 이메일"
+                members={await listInstructors(boardId)}
+                onAdd={addInstructor.bind(null, boardId)}
+                onRemove={removeInstructor.bind(null, boardId)}
+              />
+            )}
+          </BoardView>
         </div>
       );
     }

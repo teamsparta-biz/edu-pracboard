@@ -21,9 +21,22 @@ type Props = BoardContext & {
   cards: Card[];
   role: BoardRole;
   userId: string;
+  // 보드 아래에 붙는 관리 영역 (관리자의 강사 목록)
+  children?: React.ReactNode;
 };
 
-export default function BoardView({ board, lesson, round, education, division, sections, cards: allCards, role, userId }: Props) {
+export default function BoardView({
+  board,
+  lesson,
+  round,
+  education,
+  division,
+  sections,
+  cards: allCards,
+  role,
+  userId,
+  children,
+}: Props) {
   const [rawSectionIndex, setSectionIndex] = useState(0);
   const [cardFormOpen, setCardFormOpen] = useState(false);
   const [sectionFormOpen, setSectionFormOpen] = useState(false);
@@ -225,6 +238,8 @@ export default function BoardView({ board, lesson, round, education, division, s
           </div>
         )}
       </div>
+
+      {children && <div className="mt-12 max-w-2xl">{children}</div>}
 
       {section && post && (
         <CardForm

@@ -2,60 +2,59 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ADMIN_DOMAIN, getOrigin } from "@/lib/auth";
 
-// values: 에러 후 폼을 다시 채우기 위한 입력값 (비밀번호 제외)
+// 로그인 방식 (PLAN.md 2.1절)
+//   관리자(@teamsparta.co) : Google
+//   그 외 모든 주체        : 이메일만 입력. 비밀번호·메일 인증 없음 (감수한 위험, PLAN.md 2.1절)
+// 이메일만으로 로그인하는 방식은 서버에서 service role로 로그인 토큰을 만들어 바로 세션으로 바꾼다.
+
+// values: 에러 후 폼을 다시 채우기 위한 입력값
 export type FormResult = { error?: string; values?: { name?: string; email?: string } };
 
 const normalizeEmail = (v: FormDataEntryValue | null) => String(v ?? "").trim().toLowerCase();
+const isEmail = (v: string) => /^\S+@\S+\.\S+$/.test(v);
+const isAdminEmail = (email: string) => email.endsWith(`@${ADMIN_DOMAIN}`);
 
-// Supabase·DB 트리거(guard_signup) 에러를 화면 문구로 바꾼다.
-function authErrorMessage(message: string) {
-  if (message.includes("PRACBOARD_ADMIN_USE_GOOGLE")) {
-    return "팀스파르타 계정은 Google 로그인을 이용해 주세요.";
-  }
-  if (message.includes("PRACBOARD_USE_INVITE")) {
-    return "강사·고객사 담당자로 등록된 이메일이에요. 전달받은 초대 링크로 비밀번호를 설정해 주세요.";
-  }
-  if (message.includes("already registered")) return "이미 가입된 이메일이에요. 로그인해 주세요.";
-  if (message.includes("Invalid login credentials")) return "이메일 또는 비밀번호가 올바르지 않아요.";
-  if (message.includes("Password should be")) return "비밀번호는 6자 이상이어야 해요.";
-  return "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.";
-}
+const ADMIN_USE_GOOGLE = "팀스파르타 계정은 Google 로그인을 이용해 주세요.";
+const FAILED = "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.";
 
-function isAdminEmail(email: string) {
-  return email.endsWith(`@${ADMIN_DOMAIN}`);
-}
-
-export async function signInWithPassword(_: FormResult, formData: FormData): Promise<FormResult> {
+// 로그인 화면. 계정이 있거나, 관리자가 고객사 담당자·강사로 등록한 이메일이면 들어온다.
+export async function signInWithEmail(_: FormResult, formData: FormData): Promise<FormResult> {
   const email = normalizeEmail(formData.get("email"));
-  const password = String(formData.get("password") ?? "");
   const next = safeNext(formData.get("next"));
   const values = { email };
-  if (isAdminEmail(email)) return { error: authErrorMessage("PRACBOARD_ADMIN_USE_GOOGLE"), values };
+  if (!isEmail(email)) return { error: "이메일 형식을 확인해 주세요.", values };
+  if (isAdminEmail(email)) return { error: ADMIN_USE_GOOGLE, values };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: authErrorMessage(error.message), values };
+  const admin = createAdminClient();
+  if (!(await findProfile(email)) && !(await isRegistered(email))) {
+    return {
+      error: "등록되지 않은 이메일이에요. 교육생은 강사에게 받은 보드 URL로 들어와 참여해 주세요.",
+      values,
+    };
+  }
+  if (!(await ensureUser(admin, email))) return { error: FAILED, values };
+  if (!(await startSession(email))) return { error: FAILED, values };
 
   // 보드 URL에서 로그인했으면 그 보드로 돌아가 참여시킨다.
   if (next.startsWith("/b/")) await joinBoardById(next.slice(3));
   redirect(next);
 }
 
-// 교육생 가입. 이메일 인증 없이 바로 로그인되고, 들어온 보드에 교육생으로 등록된다.
-export async function signUpStudent(_: FormResult, formData: FormData): Promise<FormResult> {
+// 보드 URL에서 참여. 처음이면 계정이 만들어지고, 들어온 보드의 교육생이 된다.
+export async function joinWithEmail(_: FormResult, formData: FormData): Promise<FormResult> {
   const boardId = String(formData.get("boardId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const email = normalizeEmail(formData.get("email"));
-  const password = String(formData.get("password") ?? "");
   const values = { name, email };
   if (!name) return { error: "이름을 입력해 주세요.", values };
-  if (isAdminEmail(email)) return { error: authErrorMessage("PRACBOARD_ADMIN_USE_GOOGLE"), values };
+  if (!isEmail(email)) return { error: "이메일 형식을 확인해 주세요.", values };
+  if (isAdminEmail(email)) return { error: ADMIN_USE_GOOGLE, values };
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
-  if (error) return { error: authErrorMessage(error.message), values };
+  if (!(await ensureUser(createAdminClient(), email, name))) return { error: FAILED, values };
+  if (!(await startSession(email))) return { error: FAILED, values };
 
   await joinBoardById(boardId);
   redirect(`/b/${boardId}`);
@@ -82,17 +81,6 @@ export async function signOut() {
   redirect("/");
 }
 
-// 초대·비밀번호 재설정 링크로 들어온 사용자가 비밀번호를 정한다.
-export async function setPassword(_: FormResult, formData: FormData): Promise<FormResult> {
-  const password = String(formData.get("password") ?? "");
-  if (password !== String(formData.get("confirm") ?? "")) return { error: "비밀번호가 서로 달라요." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: authErrorMessage(error.message) };
-  redirect("/");
-}
-
 export async function joinBoard(boardId: string) {
   await joinBoardById(boardId);
   redirect(`/b/${boardId}`);
@@ -101,6 +89,44 @@ export async function joinBoard(boardId: string) {
 async function joinBoardById(boardId: string) {
   const supabase = await createClient();
   await supabase.rpc("join_board", { bid: boardId });
+}
+
+async function findProfile(email: string) {
+  const { data } = await createAdminClient().from("profiles").select("id").eq("email", email).maybeSingle();
+  return data;
+}
+
+// 관리자가 고객사 담당자 또는 강사로 등록한 이메일인지
+async function isRegistered(email: string) {
+  const admin = createAdminClient();
+  const [viewer, instructor] = await Promise.all([
+    admin.from("education_viewers").select("email", { count: "exact", head: true }).eq("email", email),
+    admin.from("board_members").select("email", { count: "exact", head: true }).eq("email", email).eq("role", "instructor"),
+  ]);
+  return !!(viewer.count || instructor.count);
+}
+
+// 계정이 없으면 비밀번호 없이 만든다 (가입 트리거가 profiles 행을 만든다).
+async function ensureUser(admin: ReturnType<typeof createAdminClient>, email: string, name?: string) {
+  if (await findProfile(email)) return true;
+  const { error } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: name ? { name } : undefined,
+  });
+  return !error;
+}
+
+// 로그인 토큰을 발급해 곧바로 세션 쿠키로 바꾼다. 메일은 보내지 않는다.
+async function startSession(email: string) {
+  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "magiclink", email });
+  if (error || !data.properties?.hashed_token) return false;
+  const supabase = await createClient();
+  const { error: verifyError } = await supabase.auth.verifyOtp({
+    token_hash: data.properties.hashed_token,
+    type: "magiclink",
+  });
+  return !verifyError;
 }
 
 // 외부 주소로 보내는 오픈 리디렉트를 막는다.

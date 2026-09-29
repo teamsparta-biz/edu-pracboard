@@ -130,6 +130,18 @@ export async function listViewers(educationId: string): Promise<Viewer[]> {
   return data ?? [];
 }
 
+// 보드에 등록된 강사 (관리자 화면용)
+export async function listInstructors(boardId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("board_members")
+    .select("email")
+    .eq("board_id", boardId)
+    .eq("role", "instructor")
+    .order("created_at");
+  return data ?? [];
+}
+
 const BOARD_CONTEXT_COLUMNS = `
   id, lesson_id, division_id,
   lesson:lessons(id, round_id, position, description, round:rounds(*)),

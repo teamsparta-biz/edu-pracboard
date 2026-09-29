@@ -2,8 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { ADMIN_DOMAIN, getOrigin, requireAdmin } from "@/lib/auth";
+import { ADMIN_DOMAIN, requireAdmin } from "@/lib/auth";
 
 // 회차·차시 생성은 이후 axhub 연동으로 대체된다 (PLAN.md 5.1절).
 
@@ -70,23 +69,27 @@ export async function createLesson(
   return {};
 }
 
-export type InviteResult = { error?: string; inviteUrl?: string; existing?: boolean; selfSignup?: boolean };
-
-// 고객사 담당자를 교육에 등록한다. 계정이 없으면 초대 링크를 만들어 돌려준다.
-export async function addViewer(educationId: string, rawEmail: string): Promise<InviteResult> {
-  await requireAdmin();
-  const email = rawEmail.trim().toLowerCase();
+// 이메일만으로 로그인하므로 등록만 하면 된다. 초대 링크·비밀번호 없음 (PLAN.md 2.1절).
+function parseEmail(raw: string) {
+  const email = raw.trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "이메일 형식을 확인해 주세요." };
   if (email.endsWith(`@${ADMIN_DOMAIN}`)) return { error: "관리자는 이미 모든 교육을 볼 수 있어요." };
+  return { email };
+}
+
+// 고객사 담당자를 교육에 등록한다 (읽기 전용).
+export async function addViewer(educationId: string, rawEmail: string): Promise<ActionResult> {
+  await requireAdmin();
+  const { email, error: invalid } = parseEmail(rawEmail);
+  if (!email) return { error: invalid };
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("education_viewers")
     .upsert({ education_id: educationId, email, source: "manual" }, { onConflict: "education_id,email", ignoreDuplicates: true });
   if (error) return { error: DENIED };
-
   refresh();
-  return inviteLinkFor(email);
+  return {};
 }
 
 export async function removeViewer(educationId: string, email: string): Promise<ActionResult> {
@@ -98,30 +101,32 @@ export async function removeViewer(educationId: string, email: string): Promise<
   return {};
 }
 
-// 초대 링크(계정 없음) 또는 비밀번호 재설정 링크(계정 있음)를 만든다.
-// 메일 발송 없이 관리자가 링크를 복사해 직접 전달한다.
-export async function createAccessLink(rawEmail: string): Promise<InviteResult> {
+// 보드에 강사를 등록한다. 이후 axhub 배정 동기화가 같은 테이블에 추가한다.
+// 이미 교육생으로 참여한 사람이면 강사로 바꾼다.
+export async function addInstructor(boardId: string, rawEmail: string): Promise<ActionResult> {
   await requireAdmin();
-  return inviteLinkFor(rawEmail.trim().toLowerCase(), { forceRecovery: true });
+  const { email, error: invalid } = parseEmail(rawEmail);
+  if (!email) return { error: invalid };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("board_members")
+    .upsert({ board_id: boardId, email, role: "instructor" }, { onConflict: "board_id,email" });
+  if (error) return { error: DENIED };
+  refresh();
+  return {};
 }
 
-async function inviteLinkFor(email: string, { forceRecovery = false } = {}): Promise<InviteResult> {
-  const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
-
-  if (profile && !forceRecovery) {
-    // 초대 없이 스스로 가입한 계정이면, 등록 전에 누군가 이메일을 선점했을 수 있다.
-    const { data } = await admin.auth.admin.getUserById(profile.id);
-    return { existing: true, selfSignup: !data.user?.invited_at };
-  }
-
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: profile ? "recovery" : "invite",
-    email,
-  });
-  if (error || !data.properties?.hashed_token) return { error: "링크를 만들지 못했어요." };
-
-  const type = profile ? "recovery" : "invite";
-  const inviteUrl = `${await getOrigin()}/auth/confirm?token_hash=${data.properties.hashed_token}&type=${type}`;
-  return { inviteUrl, existing: !!profile };
+export async function removeInstructor(boardId: string, email: string): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("board_members")
+    .delete()
+    .eq("board_id", boardId)
+    .eq("email", email)
+    .eq("role", "instructor");
+  if (error) return { error: DENIED };
+  refresh();
+  return {};
 }
