@@ -1,14 +1,25 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Lock, Plus, Trash2, MessagesSquare, ChevronLeft, ChevronRight } from "lucide-react";
-import { addCard, addSection, createImageUpload, deleteCard, deleteSection } from "@/app/actions/board";
+import { Lock, Pencil, Plus, Trash2, MessagesSquare, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  addCard,
+  addSection,
+  createUpload,
+  deleteCard,
+  deleteSection,
+  renameSection,
+  updateCard,
+  type AttachmentInput,
+} from "@/app/actions/board";
 import { createClient } from "@/lib/supabase/client";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
 import type { BoardContext } from "@/lib/data";
 import type { BoardRole, Card, Section } from "@/lib/types";
 import { educationTitle } from "@/lib/education";
-import { canDeleteCard, canManageBoard, canPost } from "@/lib/permissions";
+import { canEditCard, canManageBoard, canPost } from "@/lib/permissions";
+import ConfirmDialog from "@/components/app/ConfirmDialog";
+import { useBoardRealtime } from "@/components/board/useBoardRealtime";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import BoardCard from "@/components/board/BoardCard";
 import CardForm, { type CardFormData } from "@/components/board/CardForm";
@@ -39,10 +50,15 @@ export default function BoardView({
 }: Props) {
   const [rawSectionIndex, setSectionIndex] = useState(0);
   const [cardFormOpen, setCardFormOpen] = useState(false);
-  const [sectionFormOpen, setSectionFormOpen] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [sectionForm, setSectionForm] = useState<"add" | "rename" | null>(null);
   const [selected, setSelected] = useState<Card | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; description: string; run: () => void } | null>(null);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+
+  // 다른 사람이 바꾼 내용을 새로고침 없이 반영한다
+  useBoardRealtime(board.id);
 
   // 섹션이 삭제돼 범위를 벗어나면 마지막 섹션으로 맞춘다.
   const sectionIndex = Math.min(rawSectionIndex, Math.max(sections.length - 1, 0));
@@ -70,31 +86,57 @@ export default function BoardView({
     });
   }
 
+  const editHandler = (card: Card) => (canEditCard(role, userId, card) ? setEditingCard : undefined);
   const deleteHandler = (card: Card) =>
-    canDeleteCard(role, userId, card) ? (id: string) => run(() => deleteCard(id)) : undefined;
+    canEditCard(role, userId, card)
+      ? (target: Card) =>
+          setConfirm({
+            title: "카드를 삭제할까요?",
+            description: `"${target.title}" 카드와 첨부 파일이 삭제돼요.`,
+            run: () => {
+              setSelected(null);
+              run(() => deleteCard(target.id));
+            },
+          })
+      : undefined;
 
-  function handleAddSection(name: string) {
-    run(() => addSection(board.id, name), () => setSectionIndex(sections.length));
+  function handleSectionForm(name: string) {
+    if (sectionForm === "rename" && section) run(() => renameSection(section.id, name));
+    else run(() => addSection(board.id, name), () => setSectionIndex(sections.length));
   }
 
   function handleDeleteSection() {
     if (!section || sections.length <= 1) return;
-    run(() => deleteSection(section.id), () => setSectionIndex(Math.max(sectionIndex - 1, 0)));
+    setConfirm({
+      title: "섹션을 삭제할까요?",
+      description: `"${section.name}" 섹션의 카드 ${cards.length}개도 함께 삭제돼요.`,
+      run: () => run(() => deleteSection(section.id), () => setSectionIndex(Math.max(sectionIndex - 1, 0))),
+    });
   }
 
-  function handleAddCard(sectionId: string, data: CardFormData) {
+  // 파일은 브라우저에서 Storage로 바로 올리고, 카드에는 경로만 저장한다.
+  async function upload(file: File): Promise<AttachmentInput | { error: string }> {
+    const target = await createUpload(board.id, file.name, file.size);
+    if (target.error || !target.path || !target.token) return { error: target.error ?? "파일을 올리지 못했어요." };
+    const { error } = await createClient()
+      .storage.from(CARD_IMAGE_BUCKET)
+      .uploadToSignedUrl(target.path, target.token, file, { contentType: file.type || undefined });
+    if (error) return { error: "파일을 올리지 못했어요." };
+    return { path: target.path, name: file.name, type: file.type, size: file.size };
+  }
+
+  function handleCardForm(data: CardFormData) {
+    const editing = editingCard;
     run(async () => {
-      let imagePath: string | undefined;
-      if (data.imageFile) {
-        const upload = await createImageUpload(board.id, data.imageFile.name);
-        if (upload.error || !upload.path || !upload.token) return { error: upload.error };
-        const { error } = await createClient()
-          .storage.from(CARD_IMAGE_BUCKET)
-          .uploadToSignedUrl(upload.path, upload.token, data.imageFile);
-        if (error) return { error: "이미지를 올리지 못했어요." };
-        imagePath = upload.path;
+      let attachment: AttachmentInput | null | undefined = data.removeAttachment ? null : undefined;
+      if (data.file) {
+        const uploaded = await upload(data.file);
+        if ("error" in uploaded) return uploaded;
+        attachment = uploaded;
       }
-      return addCard(board.id, sectionId, { title: data.title, content: data.content, link: data.link, imagePath });
+      const input = { title: data.title, content: data.content, link: data.link, attachment };
+      if (editing) return updateCard(editing.id, input);
+      return section ? addCard(board.id, section.id, input) : { error: "섹션이 없어요." };
     });
   }
 
@@ -164,6 +206,13 @@ export default function BoardView({
           {manage && (
             <>
               <button
+                onClick={() => setSectionForm("rename")}
+                disabled={!section}
+                className="inline-flex items-center gap-2 border border-white/20 text-white/80 px-4 py-2 rounded-full text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              >
+                <Pencil className="w-4 h-4" /> 이름 변경
+              </button>
+              <button
                 onClick={handleDeleteSection}
                 disabled={sections.length <= 1 || pending}
                 className="inline-flex items-center gap-2 border border-white/20 text-white/80 px-4 py-2 rounded-full text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
@@ -171,7 +220,7 @@ export default function BoardView({
                 <Trash2 className="w-4 h-4" /> 섹션 삭제
               </button>
               <button
-                onClick={() => setSectionFormOpen(true)}
+                onClick={() => setSectionForm("add")}
                 className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
               >
                 <Plus className="w-4 h-4" /> 섹션 추가
@@ -210,7 +259,7 @@ export default function BoardView({
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
             {cards.map((c) => (
-              <BoardCard key={c.id} card={c} onDelete={deleteHandler(c)} onOpen={setSelected} />
+              <BoardCard key={c.id} card={c} onEdit={editHandler(c)} onDelete={deleteHandler(c)} onOpen={setSelected} />
             ))}
           </div>
         )}
@@ -241,24 +290,38 @@ export default function BoardView({
 
       {children && <div className="mt-12 max-w-2xl">{children}</div>}
 
-      {section && post && (
+      {post && (
         <CardForm
-          open={cardFormOpen}
-          onClose={() => setCardFormOpen(false)}
-          onSubmit={(data) => handleAddCard(section.id, data)}
+          open={cardFormOpen || !!editingCard}
+          card={editingCard}
+          onClose={() => {
+            setCardFormOpen(false);
+            setEditingCard(null);
+          }}
+          onSubmit={handleCardForm}
         />
       )}
       {manage && (
         <SectionForm
-          open={sectionFormOpen}
-          onClose={() => setSectionFormOpen(false)}
-          onSubmit={handleAddSection}
+          open={!!sectionForm}
+          initialName={sectionForm === "rename" ? section?.name : undefined}
+          onClose={() => setSectionForm(null)}
+          onSubmit={handleSectionForm}
         />
       )}
       <CardDetail
-        card={selected}
+        // 실시간 반영으로 카드가 바뀌거나 지워지면 열려 있는 상세도 따라간다
+        card={selected ? (allCards.find((c) => c.id === selected.id) ?? null) : null}
         onClose={() => setSelected(null)}
+        onEdit={selected ? editHandler(selected) : undefined}
         onDelete={selected ? deleteHandler(selected) : undefined}
+      />
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        onConfirm={() => confirm?.run()}
+        onClose={() => setConfirm(null)}
       />
     </div>
   );

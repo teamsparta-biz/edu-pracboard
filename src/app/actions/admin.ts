@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { ADMIN_DOMAIN, requireAdmin } from "@/lib/auth";
+import { notifyBoards, removeFiles } from "@/lib/board-events";
 
 // 회차·차시 생성은 이후 axhub 연동으로 대체된다 (PLAN.md 5.1절).
 
@@ -65,6 +66,64 @@ export async function createLesson(
     .select("id")
     .single();
   if (board) await supabase.from("sections").insert({ board_id: board.id, position: 1, name: "수강생 게시판" });
+  refresh();
+  return {};
+}
+
+export async function updateRound(
+  roundId: string,
+  input: { title: string; description?: string },
+): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("rounds")
+    .update({ title: input.title, description: input.description ?? "" })
+    .eq("id", roundId);
+  if (error) return { error: DENIED };
+  refresh();
+  return {};
+}
+
+export async function updateLesson(lessonId: string, input: { description?: string }): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("lessons").update({ description: input.description ?? "" }).eq("id", lessonId);
+  if (error) return { error: DENIED };
+  refresh();
+  return {};
+}
+
+// 회차·차시를 지우면 아래의 보드·섹션·카드가 함께 지워진다 (FK cascade). 첨부 파일도 정리한다.
+export async function deleteRound(roundId: string): Promise<ActionResult> {
+  return deleteWithBoards("rounds", roundId);
+}
+
+export async function deleteLesson(lessonId: string): Promise<ActionResult> {
+  return deleteWithBoards("lessons", lessonId);
+}
+
+async function deleteWithBoards(table: "rounds" | "lessons", id: string): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const lessonIds =
+    table === "lessons"
+      ? [id]
+      : ((await supabase.from("lessons").select("id").eq("round_id", id)).data ?? []).map((l) => l.id);
+  const boardIds = lessonIds.length
+    ? ((await supabase.from("boards").select("id").in("lesson_id", lessonIds)).data ?? []).map((b) => b.id)
+    : [];
+  const files = boardIds.length
+    ? ((await supabase.from("cards").select("attachment_path").in("board_id", boardIds)).data ?? []).map(
+        (c) => c.attachment_path,
+      )
+    : [];
+
+  const { data, error } = await supabase.from(table).delete().eq("id", id).select("id");
+  if (error || !data?.length) return { error: DENIED };
+  await removeFiles(files);
+  // 지워진 보드를 보고 있던 화면도 다시 읽어 "찾을 수 없음"으로 바뀌게 한다
+  await notifyBoards(boardIds);
   refresh();
   return {};
 }

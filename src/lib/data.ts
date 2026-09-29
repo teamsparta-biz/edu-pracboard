@@ -193,11 +193,11 @@ export async function getBoardContents(boardId: string) {
   ]);
   if (!board) return null;
 
-  // 이미지는 비공개 버킷에 있다. 이미 RLS로 카드 열람 권한을 확인했으므로 서명 URL을 발급한다.
-  const imagePaths = (cards ?? []).map((c) => c.image).filter(Boolean) as string[];
+  // 첨부 파일은 비공개 버킷에 있다. 이미 RLS로 카드 열람 권한을 확인했으므로 서명 URL을 발급한다.
+  const paths = (cards ?? []).map((c) => c.attachment_path).filter(Boolean) as string[];
   const signed = new Map<string, string>();
-  if (imagePaths.length) {
-    const { data } = await createAdminClient().storage.from(CARD_IMAGE_BUCKET).createSignedUrls(imagePaths, 60 * 60);
+  if (paths.length) {
+    const { data } = await createAdminClient().storage.from(CARD_IMAGE_BUCKET).createSignedUrls(paths, SIGNED_URL_SECONDS);
     data?.forEach((d) => d.path && d.signedUrl && signed.set(d.path, d.signedUrl));
   }
 
@@ -212,7 +212,15 @@ export async function getBoardContents(boardId: string) {
         sectionId: c.section_id,
         title: c.title,
         content: c.content,
-        image: c.image ? signed.get(c.image) : undefined,
+        attachment:
+          c.attachment_path && signed.has(c.attachment_path)
+            ? {
+                url: signed.get(c.attachment_path)!,
+                name: c.attachment_name ?? "첨부 파일",
+                type: c.attachment_type ?? "application/octet-stream",
+                size: c.attachment_size ?? undefined,
+              }
+            : undefined,
         link: c.link ?? undefined,
         authorId: c.author_id,
         author: c.author_name,
@@ -234,6 +242,9 @@ export async function listMyBoards(email: string) {
     .filter((row) => row.board)
     .map((row) => ({ ...toBoardContext(row.board), role: row.role as BoardRole }));
 }
+
+// 서명 URL 유효 시간. 보드는 실시간 반영으로 자주 다시 읽히지만, 오래 켜둔 화면을 위해 넉넉히 둔다.
+const SIGNED_URL_SECONDS = 6 * 60 * 60;
 
 export function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);

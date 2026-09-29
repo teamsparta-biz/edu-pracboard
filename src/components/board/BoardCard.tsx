@@ -1,53 +1,38 @@
 "use client";
 
-import Image from "next/image";
-import { Link as LinkIcon, Trash2 } from "lucide-react";
+import { FileText, Link as LinkIcon, Music, Play } from "lucide-react";
 import type { Card } from "@/lib/types";
+import { attachmentKind } from "@/lib/storage";
+import ItemMenu from "@/components/app/ItemMenu";
 
 type Props = {
   card: Card;
-  // 삭제 권한이 없으면 넘기지 않는다
-  onDelete?: (cardId: string) => void;
+  // 권한이 없으면 넘기지 않는다
+  onEdit?: (card: Card) => void;
+  onDelete?: (card: Card) => void;
   onOpen: (card: Card) => void;
 };
 
-export default function BoardCard({ card, onDelete, onOpen }: Props) {
+export default function BoardCard({ card, onEdit, onDelete, onOpen }: Props) {
   return (
     <div
       onClick={() => onOpen(card)}
       className="group relative bg-white rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow cursor-pointer flex flex-col"
     >
-      {onDelete && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(card.id);
-          }}
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/90 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-          aria-label="삭제"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
-
-      <div className="relative h-44 bg-muted flex items-center justify-center overflow-hidden">
-        {card.image ? (
-          <Image
-            src={card.image}
-            alt={card.title}
-            fill
-            className="object-cover"
-          />
-        ) : (
-          <LinkIcon className="w-8 h-8 text-muted-foreground/40" />
-        )}
+      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 transition-opacity">
+        <ItemMenu
+          label="카드 메뉴"
+          className="bg-white/90 text-muted-foreground hover:text-foreground"
+          onEdit={onEdit && (() => onEdit(card))}
+          onDelete={onDelete && (() => onDelete(card))}
+        />
       </div>
+
+      <CardThumbnail card={card} />
 
       <div className="p-4 flex flex-col flex-1">
         <h3 className="font-semibold text-sm line-clamp-1">{card.title}</h3>
-        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 flex-1">
-          {card.content}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 flex-1">{card.content}</p>
         {card.link && (
           <a
             href={card.link}
@@ -70,6 +55,46 @@ export default function BoardCard({ card, onDelete, onOpen }: Props) {
           <span className="shrink-0">{card.createdAt.slice(5)}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CardThumbnail({ card }: { card: Card }) {
+  const a = card.attachment;
+  const box = "relative h-44 bg-muted flex items-center justify-center overflow-hidden";
+  if (!a) {
+    return (
+      <div className={box}>
+        <LinkIcon className="w-8 h-8 text-muted-foreground/40" />
+      </div>
+    );
+  }
+
+  const kind = attachmentKind(a.type);
+  if (kind === "image") {
+    return (
+      <div className={box}>
+        {/* 비공개 파일의 서명 URL이라 이미지 최적화(공용 캐시)를 거치지 않는다 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={a.url} alt={card.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+      </div>
+    );
+  }
+  if (kind === "video") {
+    return (
+      <div className={box + " bg-black"}>
+        <video src={`${a.url}#t=0.1`} className="absolute inset-0 w-full h-full object-cover opacity-80" muted preload="metadata" />
+        <span className="relative w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+          <Play className="w-4 h-4 text-foreground translate-x-px" />
+        </span>
+      </div>
+    );
+  }
+  const Icon = kind === "audio" ? Music : FileText;
+  return (
+    <div className={box + " flex-col gap-2 px-4"}>
+      <Icon className="w-8 h-8 text-muted-foreground/60" />
+      <span className="text-xs text-muted-foreground truncate max-w-full">{a.name}</span>
     </div>
   );
 }

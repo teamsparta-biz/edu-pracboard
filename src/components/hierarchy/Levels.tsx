@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Layers, LayoutGrid, Plus, Search, Users } from "lucide-react";
-import { createLesson, createRound } from "@/app/actions/admin";
+import { createLesson, createRound, deleteLesson, deleteRound, updateLesson, updateRound } from "@/app/actions/admin";
 import { educationTitle } from "@/lib/education";
 import type { Board, Company, Division, Education, Lesson, Round } from "@/lib/types";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import LessonForm from "@/components/board/LessonForm";
 import { Badge } from "@/components/ui/badge";
+import ConfirmDialog from "@/components/app/ConfirmDialog";
+import ItemMenu from "@/components/app/ItemMenu";
 import {
   CompanyChip,
   CopyUrlButton,
@@ -116,13 +118,33 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-// 관리자의 생성 요청. 실패하면 헤더 아래에 문구를 띄운다.
+// 관리자의 생성·수정·삭제 요청. 실패하면 헤더 아래에 문구를 띄운다.
 function useCreate() {
   const [error, setError] = useState<string>();
   const [, startTransition] = useTransition();
   const run = (action: () => Promise<{ error?: string }>) =>
     startTransition(async () => setError((await action()).error));
   return { error, run };
+}
+
+type Confirm = { title: string; description: string; run: () => void } | null;
+
+// 목록 행의 수정·삭제 메뉴 (관리자만). axhub에서 온 회차·차시는 다음 동기화 때 다시 덮어써질 수 있다.
+function rowMenu(mode: Mode, onEdit: () => void, onDelete: () => void) {
+  if (mode !== "admin") return undefined;
+  return <ItemMenu className="text-muted-foreground hover:text-foreground hover:bg-muted" onEdit={onEdit} onDelete={onDelete} />;
+}
+
+function Confirmation({ confirm, onClose }: { confirm: Confirm; onClose: () => void }) {
+  return (
+    <ConfirmDialog
+      open={!!confirm}
+      title={confirm?.title ?? ""}
+      description={confirm?.description}
+      onConfirm={() => confirm?.run()}
+      onClose={onClose}
+    />
+  );
 }
 
 // 교육 → 회차 목록
@@ -139,6 +161,8 @@ export function RoundList({
 }) {
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Round | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
   const { error, run } = useCreate();
 
   const q = query.trim().toLowerCase();
@@ -175,6 +199,16 @@ export function RoundList({
                   <Layers className="w-3.5 h-3.5" /> 차시 {r.lessonCount}
                 </>
               }
+              action={rowMenu(
+                mode,
+                () => setEditing(r),
+                () =>
+                  setConfirm({
+                    title: `${r.order}회차를 삭제할까요?`,
+                    description: `차시 ${r.lessonCount}개와 그 안의 보드·카드·첨부 파일이 모두 삭제돼요.`,
+                    run: () => run(() => deleteRound(r.id)),
+                  }),
+              )}
             />
           ))}
         </div>
@@ -188,6 +222,17 @@ export function RoundList({
         nextOrder={rounds.length + 1}
         unitLabel="회차"
       />
+      <LessonForm
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        initial={editing ? { title: editing.title, description: editing.description } : undefined}
+        onSubmit={(data) =>
+          editing && run(() => updateRound(editing.id, { title: data.title ?? "", description: data.description }))
+        }
+        nextOrder={editing?.order ?? 0}
+        unitLabel="회차"
+      />
+      <Confirmation confirm={confirm} onClose={() => setConfirm(null)} />
     </PageContainer>
   );
 }
@@ -206,7 +251,24 @@ export function LessonList({
 }) {
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Lesson | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
   const { error, run } = useCreate();
+
+  const menu = (l: Lesson & { divisionCount: number; board?: Board }) =>
+    rowMenu(
+      mode,
+      () => setEditing(l),
+      () =>
+        setConfirm({
+          title: `${l.order}차시를 삭제할까요?`,
+          description:
+            l.divisionCount > 0
+              ? `분반 ${l.divisionCount}개의 보드와 카드·첨부 파일이 모두 삭제돼요.`
+              : `보드와 카드 ${l.board?.cardCount ?? 0}개, 첨부 파일이 모두 삭제돼요.`,
+          run: () => run(() => deleteLesson(l.id)),
+        }),
+    );
 
   const q = query.trim().toLowerCase();
   const filtered = q ? lessons.filter((l) => l.description.toLowerCase().includes(q)) : lessons;
@@ -247,6 +309,7 @@ export function LessonList({
                     <Users className="w-3.5 h-3.5" /> 분반 {l.divisionCount}
                   </>
                 }
+                action={menu(l)}
               />
             ) : (
               <Row
@@ -260,7 +323,14 @@ export function LessonList({
                     <LayoutGrid className="w-3.5 h-3.5" /> 자료 {l.board?.cardCount ?? 0}
                   </>
                 }
-                action={mode === "admin" && l.board ? <CopyUrlButton boardId={l.board.id} /> : undefined}
+                action={
+                  mode === "admin" ? (
+                    <>
+                      {l.board && <CopyUrlButton boardId={l.board.id} />}
+                      {menu(l)}
+                    </>
+                  ) : undefined
+                }
               />
             ),
           )}
@@ -273,6 +343,15 @@ export function LessonList({
         nextOrder={lessons.length + 1}
         withTitle={false}
       />
+      <LessonForm
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        initial={editing ? { description: editing.description } : undefined}
+        onSubmit={(data) => editing && run(() => updateLesson(editing.id, data))}
+        nextOrder={editing?.order ?? 0}
+        withTitle={false}
+      />
+      <Confirmation confirm={confirm} onClose={() => setConfirm(null)} />
     </PageContainer>
   );
 }

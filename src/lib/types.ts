@@ -65,12 +65,20 @@ export type Card = {
   sectionId: string;
   title: string;
   content: string;
-  // 표시용 서명 URL. 원본 경로는 서버에만 둔다.
-  image?: string;
+  attachment?: Attachment;
   link?: string;
   authorId: string;
   author: string;
   createdAt: string;
+};
+
+// 카드 첨부 파일. url은 표시용 서명 URL이고, 원본 경로는 서버에만 둔다.
+// 내려받기는 누를 때 원래 파일 이름으로 서명 URL을 따로 발급한다 (getAttachmentDownloadUrl).
+export type Attachment = {
+  url: string;
+  name: string;
+  type: string;
+  size?: number;
 };
 
 export type Viewer = {

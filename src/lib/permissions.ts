@@ -15,6 +15,6 @@ export const canManageBoard = (role: BoardRole) => role === "admin" || role === 
 
 export const canPost = (role: BoardRole) => role !== "viewer";
 
-// 교육생은 우선 본인 카드만 삭제 가능 (PLAN.md 7절 미정 사항)
-export const canDeleteCard = (role: BoardRole, userId: string, card: Card) =>
+// 교육생은 본인 카드만 수정·삭제 가능 (PLAN.md 7절 미정 사항)
+export const canEditCard = (role: BoardRole, userId: string, card: Card) =>
   canManageBoard(role) || (canPost(role) && card.authorId === userId);
