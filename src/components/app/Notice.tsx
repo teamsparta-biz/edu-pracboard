@@ -5,7 +5,8 @@ type Props = {
   icon: LucideIcon;
   title: string;
   description?: string;
-  action?: { label: string; href?: string; onClick?: () => void };
+  // formAction: 서버 컴포넌트에서 서버 액션을 실행할 때
+  action?: { label: string; href?: string; formAction?: () => Promise<void> };
 };
 
 export default function Notice({ icon: Icon, title, description, action }: Props) {
@@ -19,16 +20,18 @@ export default function Notice({ icon: Icon, title, description, action }: Props
         </div>
         <h1 className="mt-4 text-lg font-semibold">{title}</h1>
         {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
-        {action &&
-          (action.href ? (
-            <Link href={action.href} className={actionClass}>
-              {action.label}
-            </Link>
-          ) : (
-            <button onClick={action.onClick} className={actionClass}>
+        {action?.href && (
+          <Link href={action.href} className={actionClass}>
+            {action.label}
+          </Link>
+        )}
+        {action?.formAction && (
+          <form action={action.formAction}>
+            <button type="submit" className={actionClass}>
               {action.label}
             </button>
-          ))}
+          </form>
+        )}
       </div>
     </div>
   );

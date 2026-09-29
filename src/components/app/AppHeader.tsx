@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Repeat } from "lucide-react";
-import { useAppStore } from "@/store/AppStore";
-import { homePath, roleLabel } from "@/lib/permissions";
-import { useHydrated } from "@/lib/use-hydrated";
+import { ChevronDown, LogOut } from "lucide-react";
+import { signOut } from "@/app/actions/auth";
+import type { SessionUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -18,16 +16,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type Props = {
+  user?: SessionUser | null;
+  roleLabel?: string;
   variant?: "default" | "light";
 };
 
-export default function AppHeader({ variant = "default" }: Props) {
-  const router = useRouter();
-  const hydrated = useHydrated();
-  const storedUser = useAppStore((s) => s.getCurrentUser());
-  // 서버 렌더와 맞추기 위해 저장된 로그인 정보는 hydration 이후에만 쓴다.
-  const user = hydrated ? storedUser : undefined;
-  const signOut = useAppStore((s) => s.signOut);
+export default function AppHeader({ user, roleLabel, variant = "default" }: Props) {
   const isLight = variant === "light";
 
   return (
@@ -38,7 +32,7 @@ export default function AppHeader({ variant = "default" }: Props) {
       }
     >
       <div className="max-w-[1800px] mx-auto px-6 lg:px-12 h-14 flex items-center justify-between">
-        <Link href={user ? homePath(user) : "/"} className="font-bold tracking-tight">
+        <Link href="/" className="font-bold tracking-tight">
           PracBoard
         </Link>
 
@@ -59,12 +53,14 @@ export default function AppHeader({ variant = "default" }: Props) {
                 {user.name.charAt(0)}
               </span>
               <span className="hidden sm:inline font-medium">{user.name}</span>
-              <Badge
-                variant={isLight ? "secondary" : "outline"}
-                className={isLight ? "bg-white/15 text-white" : ""}
-              >
-                {roleLabel[user.role]}
-              </Badge>
+              {roleLabel && (
+                <Badge
+                  variant={isLight ? "secondary" : "outline"}
+                  className={isLight ? "bg-white/15 text-white" : ""}
+                >
+                  {roleLabel}
+                </Badge>
+              )}
               <ChevronDown className="w-3.5 h-3.5 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -75,16 +71,7 @@ export default function AppHeader({ variant = "default" }: Props) {
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push("/")}>
-                <Repeat /> 데모 계정 전환
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => {
-                  signOut();
-                  router.push("/");
-                }}
-              >
+              <DropdownMenuItem variant="destructive" onClick={() => signOut()}>
                 <LogOut /> 로그아웃
               </DropdownMenuItem>
             </DropdownMenuContent>

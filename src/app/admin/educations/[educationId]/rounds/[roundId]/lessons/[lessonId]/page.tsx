@@ -1,13 +1,12 @@
-"use client";
-
-import { useParams } from "next/navigation";
+import { getLessonWithDivisions } from "@/lib/data";
 import { DivisionList } from "@/components/hierarchy/Levels";
+import { NotFound } from "@/components/hierarchy/shared";
 
-export default function AdminLesson() {
-  const { educationId, roundId, lessonId } = useParams<{
-    educationId: string;
-    roundId: string;
-    lessonId: string;
-  }>();
-  return <DivisionList mode="admin" educationId={educationId} roundId={roundId} lessonId={lessonId} />;
+export default async function AdminLesson({
+  params,
+}: PageProps<"/admin/educations/[educationId]/rounds/[roundId]/lessons/[lessonId]">) {
+  const { educationId, roundId, lessonId } = await params;
+  const data = await getLessonWithDivisions(educationId, roundId, lessonId);
+  if (!data) return <NotFound label="차시" />;
+  return <DivisionList mode="admin" {...data} />;
 }

@@ -1,71 +1,61 @@
-"use client";
-
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { Lock } from "lucide-react";
-import { useAppStore } from "@/store/AppStore";
+import { Lock, LogIn } from "lucide-react";
+import { joinBoard } from "@/app/actions/auth";
+import { getSessionUser } from "@/lib/auth";
+import { getBoardContents, getBoardPreview, getBoardRole, type BoardContext } from "@/lib/data";
 import { educationTitle } from "@/lib/education";
-import { canViewBoard, homePath } from "@/lib/permissions";
-import { useHydrated } from "@/lib/use-hydrated";
+import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
-import { Loading } from "@/components/app/RoleGate";
 import BoardView from "@/components/board/BoardView";
 import JoinBoard from "@/components/board/JoinBoard";
 
+const boardTitle = ({ round, lesson, division, education }: BoardContext) => ({
+  subtitle: `${educationTitle(education.name)} · ${round.order}회차`,
+  title: `${lesson.order}차시${division ? ` · ${division.name}` : ""} 보드`,
+});
+
 // 최소 단위 교육의 고유 URL. 강사·교육생은 이 화면만 본다.
-export default function BoardPage() {
-  const { boardId } = useParams<{ boardId: string }>();
-  const hydrated = useHydrated();
-  const user = useAppStore((s) => s.getCurrentUser());
-  const { getBoard, getLesson, getRound, getEducation, getDivision, joinBoard, signOut } = useAppStore();
+export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
+  const { boardId } = await params;
+  const user = await getSessionUser();
+  const role = user ? await getBoardRole(boardId).catch(() => null) : null;
 
-  const board = getBoard(boardId);
-  const lesson = getLesson(board?.lessonId);
-  const round = getRound(lesson?.roundId);
-  const education = getEducation(round?.educationId);
-  const division = getDivision(board?.divisionId);
+  if (user && role) {
+    const contents = await getBoardContents(boardId);
+    if (contents) {
+      return (
+        <div className="min-h-screen flex flex-col bg-[#591a2e]">
+          <AppHeader user={user} roleLabel={roleLabel[role]} variant="light" />
+          <BoardView {...contents} role={role} userId={user.id} />
+        </div>
+      );
+    }
+  }
 
+  const preview = await getBoardPreview(boardId);
   let content: React.ReactNode;
-  let dark = false;
 
-  if (!hydrated) {
-    content = <Loading />;
-  } else if (!board || !lesson || !round || !education) {
+  if (!preview) {
     content = <Notice icon={Lock} title="보드를 찾을 수 없어요" description="URL을 다시 확인해 주세요." />;
   } else if (!user) {
-    content = (
-      <JoinBoard
-        subtitle={`${educationTitle(education.name)} · ${round.order}회차`}
-        title={`${lesson.order}차시${division ? ` · ${division.name}` : ""} 보드`}
-        onJoin={(name, email) => joinBoard(board.id, name, email)}
-      />
-    );
-  } else if (!canViewBoard(user, board, education.id)) {
+    content = <JoinBoard boardId={boardId} {...boardTitle(preview)} />;
+  } else {
+    // 로그인했지만 이 보드에는 아직 참여하지 않은 경우
+    const { subtitle, title } = boardTitle(preview);
     content = (
       <Notice
-        icon={Lock}
-        title="이 보드에 접근할 수 없어요"
-        description="현재 계정은 다른 교육에 연결되어 있어요. 이 보드에 새로 참여하려면 로그아웃해 주세요."
-        action={{ label: "로그아웃하고 참여하기", onClick: signOut }}
+        icon={LogIn}
+        title={`${title}에 참여할까요?`}
+        description={`${subtitle} · ${user.email} 계정으로 교육생으로 참여해요.`}
+        action={{ label: "참여하기", formAction: joinBoard.bind(null, boardId) }}
       />
     );
-  } else {
-    dark = true;
-    content = <BoardView board={board} user={user} />;
   }
 
   return (
-    <div className={"min-h-screen flex flex-col " + (dark ? "bg-[#591a2e]" : "bg-muted/30")}>
-      <AppHeader variant={dark ? "light" : "default"} />
+    <div className="min-h-screen flex flex-col bg-muted/30">
+      <AppHeader user={user} />
       {content}
-      {hydrated && user && !dark && board && (
-        <p className="pb-10 text-center text-xs text-muted-foreground">
-          <Link href={homePath(user)} className="underline underline-offset-4">
-            내 화면으로 돌아가기
-          </Link>
-        </p>
-      )}
     </div>
   );
 }

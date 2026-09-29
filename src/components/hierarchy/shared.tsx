@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Link2, Lock } from "lucide-react";
 import Notice from "@/components/app/Notice";
 import { Badge } from "@/components/ui/badge";
-import type { Company } from "@/store/types";
+import type { Company } from "@/lib/types";
 
 export type Mode = "admin" | "client";
 
@@ -23,13 +23,22 @@ export function PageContainer({ children }: { children: React.ReactNode }) {
   return <div className="w-full max-w-6xl mx-auto px-6 py-10">{children}</div>;
 }
 
+// 고객사별 색을 따로 저장하지 않으므로 이름에서 색을 정한다.
+const CHIP_COLORS = ["#1c2b8f", "#0a2e5c", "#a1004b", "#2f7d32", "#6a1b9a", "#b45309", "#0f766e", "#374151"];
+
+function chipColor(name: string) {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return CHIP_COLORS[hash % CHIP_COLORS.length];
+}
+
 export function CompanyChip({ company }: { company?: Company }) {
   if (!company) return null;
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
       <span
         className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
-        style={{ backgroundColor: company.color, color: company.textColor || "#fff" }}
+        style={{ backgroundColor: chipColor(company.name), color: "#fff" }}
       >
         {company.name.charAt(0)}
       </span>

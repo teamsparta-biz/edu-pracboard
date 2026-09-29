@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Link as LinkIcon, Trash2 } from "lucide-react";
-import type { Card } from "@/store/AppStore";
+import type { Card } from "@/lib/types";
 
 type Props = {
   card: Card;

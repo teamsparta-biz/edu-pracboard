@@ -1,138 +1,71 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { ArrowUpRight, BookOpen, Building2, GraduationCap, ShieldCheck, UserPlus } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { useAppStore } from "@/store/AppStore";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ArrowUpRight, Link2 } from "lucide-react";
+import { getSessionUser, homePath } from "@/lib/auth";
+import { listMyBoards } from "@/lib/data";
 import { educationTitle } from "@/lib/education";
-import type { Role } from "@/store/types";
-import { homePath, roleLabel } from "@/lib/permissions";
-import { useHydrated } from "@/lib/use-hydrated";
+import { roleLabel } from "@/lib/permissions";
+import AppHeader from "@/components/app/AppHeader";
+import Notice from "@/components/app/Notice";
+import LoginForm from "@/components/auth/LoginForm";
 import { Badge } from "@/components/ui/badge";
-import { Loading } from "@/components/app/RoleGate";
 
-const roles: { role: Role; icon: LucideIcon; scope: string; permission: string }[] = [
-  { role: "admin", icon: ShieldCheck, scope: "생성된 모든 교육", permission: "Master" },
-  { role: "client", icon: Building2, scope: "read 권한이 있는 교육", permission: "Read" },
-  { role: "instructor", icon: BookOpen, scope: "배정된 보드 URL 1개", permission: "CRUD" },
-  { role: "student", icon: GraduationCap, scope: "가입한 보드 URL 1개", permission: "CRUD" },
-];
+// 로그인 화면이자, 로그인한 사용자를 자기 화면으로 보내는 입구.
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const params = await searchParams;
+  const user = await getSessionUser();
 
-const SIGNUP_DEMO_BOARD = "onb-r1-l1";
-
-// 인증이 붙기 전까지 주체별 화면을 확인하기 위한 데모 계정 선택 화면.
-export default function Home() {
-  const router = useRouter();
-  const hydrated = useHydrated();
-  const { users, currentUserId, signIn, signOut, getBoard, getLesson, getRound, getEducation } =
-    useAppStore();
-
-  function boardLabel(boardId?: string) {
-    const lesson = getLesson(getBoard(boardId)?.lessonId);
-    const round = getRound(lesson?.roundId);
-    const education = getEducation(round?.educationId);
-    if (!lesson || !round || !education) return "";
-    return `${educationTitle(education.name)} · ${round.order}회차 ${lesson.order}차시`;
+  if (!user) {
+    const next = typeof params.next === "string" ? params.next : "/";
+    const error = typeof params.error === "string" ? params.error : undefined;
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center px-6 py-16">
+        <LoginForm next={next} linkError={error} />
+      </div>
+    );
   }
 
-  function scopeLabel(userId: string) {
-    const u = users.find((x) => x.id === userId)!;
-    if (u.role === "admin") return "전체 교육";
-    if (u.role === "client") return u.educationIds?.map((id) => educationTitle(getEducation(id)?.name ?? "")).join(", ");
-    return boardLabel(u.boardId);
-  }
+  const home = await homePath(user);
+  if (home !== "/") redirect(home);
+
+  // 강사·교육생: 참여한 보드가 하나면 바로 이동, 여러 개면 목록
+  const boards = await listMyBoards(user.email);
+  if (boards.length === 1) redirect(`/b/${boards[0].board.id}`);
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <div className="max-w-6xl mx-auto px-6 py-12 sm:py-16">
-        <div className="mb-10">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-            PracBoard · 교육 실습 결과물 보드
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">데모 계정 선택</h1>
-          <p className="mt-2 text-muted-foreground">
-            로그인이 붙기 전까지, 주체별 화면을 계정을 바꿔가며 확인할 수 있어요.
-          </p>
-        </div>
-
-        {!hydrated ? (
-          <Loading />
-        ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {roles.map(({ role, icon: Icon, scope, permission }) => (
-            <section key={role} className="bg-white rounded-2xl border border-border p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                    <Icon className="w-5 h-5" />
+    <div className="min-h-screen bg-muted/30 flex flex-col">
+      <AppHeader user={user} />
+      {boards.length === 0 ? (
+        <Notice
+          icon={Link2}
+          title="참여한 보드가 없어요"
+          description="강사에게 받은 보드 URL로 들어오면 그 보드에 참여할 수 있어요."
+        />
+      ) : (
+        <div className="w-full max-w-3xl mx-auto px-6 py-10">
+          <h1 className="text-3xl font-bold tracking-tight">내 보드</h1>
+          <div className="mt-8 space-y-3">
+            {boards.map(({ board, lesson, round, education, division, role }) => (
+              <Link
+                key={board.id}
+                href={`/b/${board.id}`}
+                className="group flex items-center gap-4 bg-white rounded-2xl border border-border p-5 hover:shadow-md transition-all"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-muted-foreground truncate">
+                    {education.company?.name} · {educationTitle(education.name)}
                   </div>
-                  <div>
-                    <h2 className="font-semibold">{roleLabel[role]}</h2>
-                    <p className="text-xs text-muted-foreground">{scope}</p>
+                  <div className="mt-1 font-semibold">
+                    {round.order}회차 {lesson.order}차시{division ? ` · ${division.name}` : ""}
                   </div>
                 </div>
-                <Badge variant="outline">{permission}</Badge>
-              </div>
-
-              <div className="mt-5 space-y-2">
-                {users
-                  .filter((u) => u.role === role)
-                  .map((u) => {
-                    const active = u.id === currentUserId;
-                    return (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          signIn(u.id);
-                          router.push(homePath(u));
-                        }}
-                        className={
-                          "group w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors " +
-                          (active ? "border-foreground bg-muted/50" : "border-border hover:bg-muted/50")
-                        }
-                      >
-                        <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
-                          {u.name.charAt(0)}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium flex items-center gap-2">
-                            {u.name}
-                            {active && <Badge variant="secondary">현재</Badge>}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {u.email} · {scopeLabel(u.id)}
-                          </div>
-                        </div>
-                        <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                      </button>
-                    );
-                  })}
-
-                {role === "student" && (
-                  <button
-                    onClick={() => {
-                      signOut();
-                      router.push(`/b/${SIGNUP_DEMO_BOARD}`);
-                    }}
-                    className="w-full flex items-center gap-3 rounded-xl border border-dashed border-border px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-                  >
-                    <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                      <UserPlus className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <div className="text-sm font-medium">보드 URL로 새로 가입하기</div>
-                      <div className="text-xs text-muted-foreground">
-                        로그아웃 상태로 {boardLabel(SIGNUP_DEMO_BOARD)} 보드에 들어가요
-                      </div>
-                    </div>
-                  </button>
-                )}
-              </div>
-            </section>
-          ))}
+                <Badge variant="outline">{roleLabel[role]}</Badge>
+                <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+            ))}
+          </div>
         </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

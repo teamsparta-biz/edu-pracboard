@@ -13,12 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
-type CardFormData = {
+export type CardFormData = {
   title: string;
   content?: string;
-  image?: string;
+  imageFile?: File;
   link?: string;
 };
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 type Props = {
   open: boolean;
@@ -30,14 +32,24 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [link, setLink] = useState("");
-  const [image, setImage] = useState<string | undefined>(undefined);
+  const [imageFile, setImageFile] = useState<File>();
+  // 미리보기용 로컬 URL. 실제 업로드는 등록할 때 한다.
+  const [image, setImage] = useState<string>();
+  const [fileError, setFileError] = useState<string>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setTitle("");
     setContent("");
     setLink("");
+    clearImage();
+  }
+
+  function clearImage() {
+    if (image) URL.revokeObjectURL(image);
     setImage(undefined);
+    setImageFile(undefined);
+    setFileError(undefined);
   }
 
   function handleClose() {
@@ -47,10 +59,15 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setImage(reader.result as string);
-    reader.readAsDataURL(file);
+    if (file.size > MAX_IMAGE_BYTES) {
+      setFileError("이미지는 10MB 이하만 올릴 수 있어요.");
+      return;
+    }
+    clearImage();
+    setImageFile(file);
+    setImage(URL.createObjectURL(file));
   }
 
   function handleSubmit() {
@@ -58,7 +75,7 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
     onSubmit({
       title: title.trim(),
       content: content.trim() || undefined,
-      image,
+      imageFile,
       link: link.trim() || undefined,
     });
     reset();
@@ -98,7 +115,7 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
                 <img src={image} alt="미리보기" className="w-full h-40 object-cover" />
                 <button
                   type="button"
-                  onClick={() => setImage(undefined)}
+                  onClick={clearImage}
                   className="absolute top-2 right-2 p-1 rounded-full bg-white/90 text-muted-foreground hover:text-destructive"
                   aria-label="이미지 제거"
                 >
@@ -115,8 +132,8 @@ export default function CardForm({ open, onClose, onSubmit }: Props) {
                 <span className="text-sm">업로드</span>
               </button>
             )}
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              이미지, 비디오, 오디오, 링크 또는 파일을 추가할 수 있어요.
+            <p className={"mt-1.5 text-xs " + (fileError ? "text-destructive" : "text-muted-foreground")}>
+              {fileError ?? "이미지를 추가할 수 있어요. (10MB 이하)"}
             </p>
           </div>
 

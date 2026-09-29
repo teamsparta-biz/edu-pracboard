@@ -1,27 +1,23 @@
-export type Role = "admin" | "client" | "instructor" | "student";
+// 화면에서 쓰는 모델. DB 행(snake_case)은 src/lib/data.ts에서 이 형태로 바꾼다.
 
-export type User = {
+export type SessionUser = {
   id: string;
-  name: string;
   email: string;
-  role: Role;
-  // 고객사 담당자: read 권한이 부여된 교육
-  educationIds?: string[];
-  // 강사 / 교육생: 접근 가능한 보드(최소 단위 교육) 하나
-  boardId?: string;
+  name: string;
+  isAdmin: boolean;
 };
+
+// board_role() 결과. viewer = 고객사 담당자(읽기 전용)
+export type BoardRole = "admin" | "instructor" | "student" | "viewer";
 
 export type Company = {
   id: string;
   name: string;
-  domain: string;
-  color: string;
-  textColor?: string;
 };
 
 export type Education = {
   id: string;
-  companyId: string;
+  company?: Company;
   // axhub 원본 교육명. "[기업명] - 교육명" 형태이며, 화면에는 educationTitle()로 교육명만 보여준다.
   name: string;
 };
@@ -50,11 +46,11 @@ export type Division = {
 };
 
 // 최소 단위 교육. 고유 URL(/b/[id])을 가진다.
-// 분반이 없는 차시는 보드 1개, 분반이 있는 차시는 분반마다 보드 1개.
 export type Board = {
   id: string;
   lessonId: string;
   divisionId?: string;
+  cardCount: number;
 };
 
 export type Section = {
@@ -69,9 +65,15 @@ export type Card = {
   sectionId: string;
   title: string;
   content: string;
+  // 표시용 서명 URL. 원본 경로는 서버에만 둔다.
   image?: string;
   link?: string;
   authorId: string;
   author: string;
   createdAt: string;
+};
+
+export type Viewer = {
+  email: string;
+  source: "axhub" | "manual";
 };

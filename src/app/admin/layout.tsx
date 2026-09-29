@@ -1,13 +1,12 @@
-"use client";
-
+import { requireAdmin } from "@/lib/auth";
 import AppHeader from "@/components/app/AppHeader";
-import RoleGate from "@/components/app/RoleGate";
 
-export default function AdminLayout({ children }: LayoutProps<"/admin">) {
+export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
+  const user = await requireAdmin();
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col">
-      <AppHeader />
-      <RoleGate allow={["admin"]}>{children}</RoleGate>
+      <AppHeader user={user} roleLabel="관리자" />
+      {children}
     </div>
   );
 }

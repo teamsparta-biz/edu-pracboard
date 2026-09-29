@@ -7,7 +7,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Card } from "@/store/AppStore";
+import type { Card } from "@/lib/types";
 
 type Props = {
   card: Card | null;
