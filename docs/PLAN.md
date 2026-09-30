@@ -54,6 +54,8 @@ board_members      (board_id, email, role)           role = instructor | student
 
 - **고객사 담당자:** axhub 교육의 담당자(`courses.client_contact_id` → `client_contacts.email`)를 자동 등록하고, 관리자가 교육 화면에서 추가 등록할 수도 있다. 이메일 기준으로 등록하므로 가입 전에도 권한을 줄 수 있다.
 - **강사:** axhub `assignments`(강사 × 차시)를 동기화해 해당 차시의 보드에 권한을 준다. 강사가 바뀌면 **추가만 하고 삭제하지 않는다** (이전·현재 강사 모두 접근). 관리자가 보드 화면에서 직접 추가·해제할 수도 있다.
+  - 보드 관리 권한은 **주강사(`role_category = main_instructor`)에게만** 준다. 기술튜터·특강·멘토는 우선 제외 (2026-09-30).
+  - 강사 이메일은 `email`과 `auth_email`을 **둘 다** 등록해, 어느 쪽으로 입력해도 로그인되게 한다 (22명은 두 값이 다르다).
 - **교육생:** 보드 URL로 참여하면 그 보드의 student로 등록된다.
 - 권한 시나리오는 `npm run test:rls`(`supabase/tests`)로 확인한다.
 - 권한은 화면(`src/lib/permissions.ts`)뿐 아니라 **Supabase RLS**로 DB에서 강제한다. RLS 판단을 단순하게 하려고 `boards`에 `education_id`를 비정규화해 둔다.
@@ -71,6 +73,11 @@ board_members      (board_id, email, role)           role = instructor | student
 - 구조의 **가장 마지막 단위(최소 단위 교육)** 가 하나의 보드이며, 고유 URL을 가진다.
 - 최소 단위 교육은 이후 **axhub와 연동**해서 생성된다.
 - axhub 대응: 교육 = `courses`, 회차 = `course_rounds`, 차시 = `course_sessions`.
+- **axhub 접근 (2026-09-30):** axhub에 PracBoard 전용 스키마 `pracboard`의 뷰 5개(`pracboard.courses`, `course_rounds`, `course_sessions`, `assignments`, `instructors`)가 있고, 이것만 읽을 수 있는 읽기 전용 계정 `pracboard_reader`로 접속한다 (`AXHUB_DATABASE_URL`, 풀러 접속 문자열).
+  - 이메일이 들어 있어 공개 키(anon)·로그인 사용자에게는 열지 않았다. 계정은 읽기 전용 트랜잭션, 쿼리 타임아웃 30초, 동시 접속 3개.
+  - `course_sessions.start_time`·`end_time`은 시각이 아니라 숫자(`double precision`, 13.5 = 13시 30분)다.
+  - 회차는 제목 없이 번호(`round_number`)만 있으므로 "N회차"로 표시한다. 회차 `status`는 `active`/`cancelled`.
+  - 이전에 받았던 axhub 공개 키와 출처 불명 API 키는 PracBoard에서 삭제했다.
 - 분반은 axhub 데이터를 따른다. 현재 axhub는 분반을 폐지(`class_id` 삭제)했으므로, 연동 시점에는 **차시 하나 = 보드 하나**가 된다.
 
 ## 4. 화면 구성
@@ -131,7 +138,7 @@ Supabase 인증·DB로 동작한다 (2.1, 2.2절). 스키마는 `supabase/migrat
 ## 6. 용어
 
 - **교육:** 최상위 단위. 고객사 담당자의 read 권한이 부여되는 단위.
-  - axhub의 교육명은 `[기업명] - 교육명` 형태다. 화면에는 교육명만 보여준다. (예: `[삼성전자] - 신입사원 온보딩` → `신입사원 온보딩`)
+  - axhub 교육명(`courses.title`)은 대부분 형식 없이 교육명만 있다 (예: `화승코퍼레이션 AX 실무진 과정`). 기업명은 `deals → clients.name`(`pracboard.courses.client_name`)에서 따로 가져온다. 일부 `[기업명] 교육명` 형태는 화면에서 앞의 `[기업명]`을 떼고 보여준다.
   - 관리자 화면의 교육 검색은 기업명과 교육명을 함께 대상으로 한다. 고객사별 필터 버튼은 두지 않는다.
 - **회차 / 차시 / 분반:** 교육의 하위 단위. 분반은 선택.
 - **최소 단위 교육 (보드):** 계층의 마지막 단위. 고유 URL을 가지며 강사·교육생이 접근하는 곳.
@@ -139,7 +146,7 @@ Supabase 인증·DB로 동작한다 (2.1, 2.2절). 스키마는 `supabase/migrat
 ## 7. 미정 사항 (이후 구체화)
 
 - **교육생 CRUD 범위:** 보드 전체 게시물인지, 본인이 올린 게시물만인지.
-- **axhub 연동 방식:** 동기화 주기(수동 / 주기 실행 / 웹훅), 어떤 계정으로 읽어올지.
+- **axhub 동기화 방식 (보류, 2026-09-30):** 가져올 교육 범위(상태), 주기(자동 실행 / 수동 버튼), axhub에서 사라지거나 취소된 교육·회차를 PracBoard에서 어떻게 할지. 접근 계정은 확정됨 (3절).
 - **관리자 화면의 기업 정보:** 최상위가 교육으로 바뀐 뒤 고객사 정보를 어디에 표시할지.
 
 확정됨 (2026-09-28): 강사 배정(axhub `assignments`), 교육생 가입 흐름, 고객사 담당자 권한 부여(axhub 자동 + 수동 등록, 여러 명 가능) → 2.1, 2.2절.
