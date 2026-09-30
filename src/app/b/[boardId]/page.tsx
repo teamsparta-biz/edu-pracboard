@@ -2,7 +2,7 @@ import { Lock, LogIn } from "lucide-react";
 import { joinBoard } from "@/app/actions/auth";
 import { addInstructor, removeInstructor } from "@/app/actions/admin";
 import { getSessionUser } from "@/lib/auth";
-import { getBoardContents, getBoardPreview, getBoardRole, listInstructors, type BoardContext } from "@/lib/data";
+import { getBoardContents, getBoardPreview, getBoardRole, isUuid, listInstructors, type BoardContext } from "@/lib/data";
 import { educationTitle, roundLabel } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
@@ -19,11 +19,17 @@ const boardTitle = ({ round, lesson, division, education }: BoardContext) => ({
 // 최소 단위 교육의 고유 URL. 강사·교육생은 이 화면만 본다.
 export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
   const { boardId } = await params;
-  const user = await getSessionUser();
-  const role = user ? await getBoardRole(boardId).catch(() => null) : null;
+  // 서울 DB까지 왕복이 여러 번이므로 서로 기다릴 필요 없는 조회는 한꺼번에 보낸다.
+  // 로그인하지 않았거나 권한이 없으면 RLS가 빈 결과를 돌려줄 뿐이다.
+  const valid = isUuid(boardId);
+  const [user, role, contents, instructors] = await Promise.all([
+    getSessionUser(),
+    valid ? getBoardRole(boardId).catch(() => null) : null,
+    valid ? getBoardContents(boardId) : null,
+    valid ? listInstructors(boardId) : [],
+  ]);
 
   if (user && role) {
-    const contents = await getBoardContents(boardId);
     if (contents) {
       return (
         <div className="min-h-screen flex flex-col bg-[#591a2e]">
@@ -34,7 +40,7 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
                 title="강사"
                 description="등록된 이메일로 로그인하면 이 보드의 섹션과 카드를 관리할 수 있어요. axhub 배정은 자동으로 추가돼요."
                 placeholder="강사 이메일"
-                members={await listInstructors(boardId)}
+                members={instructors}
                 onAdd={addInstructor.bind(null, boardId)}
                 onRemove={removeInstructor.bind(null, boardId)}
               />

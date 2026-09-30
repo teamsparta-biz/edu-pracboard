@@ -210,12 +210,7 @@ export async function getBoardContents(boardId: string) {
   if (!board) return null;
 
   // 첨부 파일은 비공개 버킷에 있다. 이미 RLS로 카드 열람 권한을 확인했으므로 서명 URL을 발급한다.
-  const paths = (cards ?? []).map((c) => c.attachment_path).filter(Boolean) as string[];
-  const signed = new Map<string, string>();
-  if (paths.length) {
-    const { data } = await createAdminClient().storage.from(CARD_IMAGE_BUCKET).createSignedUrls(paths, SIGNED_URL_SECONDS);
-    data?.forEach((d) => d.path && d.signedUrl && signed.set(d.path, d.signedUrl));
-  }
+  const signed = await signedUrls((cards ?? []).map((c) => c.attachment_path).filter(Boolean) as string[]);
 
   return {
     ...toBoardContext(board),
@@ -259,8 +254,35 @@ export async function listMyBoards(email: string) {
     .map((row) => ({ ...toBoardContext(row.board), role: row.role as BoardRole }));
 }
 
-// 서명 URL 유효 시간. 보드는 실시간 반영으로 자주 다시 읽히지만, 오래 켜둔 화면을 위해 넉넉히 둔다.
+// 서명 URL은 발급할 때마다 달라져서, 그대로 쓰면 실시간 반영으로 다시 읽을 때마다 브라우저가
+// 이미지·동영상을 전부 새로 받는다. 같은 파일에는 남은 시간이 넉넉한 동안 같은 URL을 다시 쓴다.
+// 서버 인스턴스별 메모리 캐시다. 접근 권한은 이 함수를 부르기 전에 RLS로 카드를 읽으며 이미 확인했다.
 const SIGNED_URL_SECONDS = 6 * 60 * 60;
+const REUSE_UNTIL_SECONDS_LEFT = 2 * 60 * 60;
+const signedCache = new Map<string, { url: string; expiresAt: number }>();
+
+async function signedUrls(paths: string[]) {
+  const now = Date.now();
+  const result = new Map<string, string>();
+  const missing: string[] = [];
+  for (const path of new Set(paths)) {
+    const hit = signedCache.get(path);
+    if (hit && hit.expiresAt - now > REUSE_UNTIL_SECONDS_LEFT * 1000) result.set(path, hit.url);
+    else missing.push(path);
+  }
+  if (missing.length) {
+    const { data } = await createAdminClient().storage.from(CARD_IMAGE_BUCKET).createSignedUrls(missing, SIGNED_URL_SECONDS);
+    const expiresAt = now + SIGNED_URL_SECONDS * 1000;
+    data?.forEach((d) => {
+      if (!d.path || !d.signedUrl) return;
+      result.set(d.path, d.signedUrl);
+      signedCache.set(d.path, { url: d.signedUrl, expiresAt });
+    });
+    // 지워진 파일의 항목이 쌓이지 않게 만료된 것을 정리한다
+    if (signedCache.size > 5000) for (const [p, v] of signedCache) if (v.expiresAt <= now) signedCache.delete(p);
+  }
+  return result;
+}
 
 export function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
