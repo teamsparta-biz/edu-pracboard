@@ -15,6 +15,18 @@ export default async function globalSetup(config: FullConfig) {
   }
   console.log(`[e2e] Supabase 대상: ${url}`);
 
+  // 테스트 서버(next dev)는 .env.local(운영)도 읽는다. 이미 설정된 변수(빈 값 포함)는 덮어쓰지 않으므로,
+  // 앱이 쓰는 변수(.env.local.example)가 모두 .env.e2e에 있어야 운영 값이 섞이지 않는다.
+  const required = fs
+    .readFileSync(".env.local.example", "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.match(/^([A-Z0-9_]+)=/)?.[1])
+    .filter((k): k is string => !!k);
+  const missing = required.filter((k) => process.env[k] === undefined);
+  if (missing.length) {
+    throw new Error(`.env.e2e에 없는 변수가 있어 운영 값이 섞일 수 있어요: ${missing.join(", ")}. 값이 필요 없으면 빈 값으로라도 적어 주세요.`);
+  }
+
   // 키가 다른 프로젝트 것이면 형식과 길이가 같아도 여기서 거부된다
   const db = service();
   const { error: authError } = await db.auth.admin.listUsers({ page: 1, perPage: 1 });
