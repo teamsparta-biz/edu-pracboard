@@ -3,14 +3,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, BookOpen, LayoutGrid, Search } from "lucide-react";
-import { educationTitle } from "@/lib/education";
+import { educationStatusLabel, educationTitle } from "@/lib/education";
 import type { Education } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import { CompanyChip, PageContainer, ReadOnlyBadge, educationPath, type Mode } from "./shared";
 
 type EducationItem = Education & { roundCount: number; boardCount: number };
 
 // 목록은 RLS로 이미 걸러져 온다 (관리자: 전체, 고객사 담당자: 열람 권한이 있는 교육).
-export default function EducationList({ mode, educations }: { mode: Mode; educations: EducationItem[] }) {
+export default function EducationList({
+  mode,
+  educations,
+  children,
+}: {
+  mode: Mode;
+  educations: EducationItem[];
+  // 목록 위에 붙는 영역 (관리자의 axhub 동기화)
+  children?: React.ReactNode;
+}) {
   const [query, setQuery] = useState("");
 
   // 기업명으로 검색해도, 교육명으로 검색해도 걸리도록 둘 다 본다.
@@ -33,6 +43,8 @@ export default function EducationList({ mode, educations }: { mode: Mode; educat
           {isAdmin ? `생성된 모든 교육 ${educations.length}개` : "열람 권한이 있는 교육만 표시돼요."}
         </p>
       </div>
+
+      {children}
 
       {isAdmin && (
         <div className="mb-6">
@@ -61,7 +73,12 @@ export default function EducationList({ mode, educations }: { mode: Mode; educat
               className="group bg-white rounded-2xl border border-border p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
             >
               <div className="flex items-center justify-between">
-                <CompanyChip company={ed.company} />
+                <span className="flex items-center gap-2 min-w-0">
+                  <CompanyChip company={ed.company} />
+                  {educationStatusLabel(ed.status) && (
+                    <Badge variant={ed.status === "stopped" ? "destructive" : "secondary"}>{educationStatusLabel(ed.status)}</Badge>
+                  )}
+                </span>
                 <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
               </div>
               <h2 className="mt-4 text-lg font-semibold leading-snug flex-1">{educationTitle(ed.name)}</h2>

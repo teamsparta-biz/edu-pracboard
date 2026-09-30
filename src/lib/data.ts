@@ -15,6 +15,8 @@ const toEducation = (row: any): Education => ({
   id: row.id,
   name: row.name,
   company: toCompany(row.company),
+  status: row.status ?? undefined,
+  synced: !!row.axhub_course_id,
 });
 
 const toRound = (row: any): Round => ({
@@ -23,6 +25,7 @@ const toRound = (row: any): Round => ({
   order: row.position,
   title: row.title,
   description: row.description,
+  synced: !!row.axhub_round_id,
 });
 
 const toLesson = (row: any): Lesson => ({
@@ -30,6 +33,7 @@ const toLesson = (row: any): Lesson => ({
   roundId: row.round_id,
   order: row.position,
   description: row.description,
+  synced: !!row.axhub_key,
 });
 
 const toDivision = (row: any): Division => ({
@@ -47,7 +51,7 @@ const toBoard = (row: any): Board => ({
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-const EDUCATION_COLUMNS = "id, name, company:companies(id, name)";
+const EDUCATION_COLUMNS = "id, name, status, axhub_course_id, company:companies(id, name)";
 
 export async function listEducations() {
   const supabase = await createClient();
@@ -120,6 +124,18 @@ export async function getLessonWithDivisions(educationId: string, roundId: strin
   return { education: toEducation(education), round: toRound(round), lesson: toLesson(lesson), divisions };
 }
 
+// 마지막 axhub 동기화 (관리자 화면)
+export async function getLastSync() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("axhub_sync_runs")
+    .select("trigger, started_at, finished_at, ok, summary, error")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
 export async function listViewers(educationId: string): Promise<Viewer[]> {
   const supabase = await createClient();
   const { data } = await supabase
@@ -144,7 +160,7 @@ export async function listInstructors(boardId: string) {
 
 const BOARD_CONTEXT_COLUMNS = `
   id, lesson_id, division_id,
-  lesson:lessons(id, round_id, position, description, round:rounds(*)),
+  lesson:lessons(id, round_id, position, description, axhub_key, round:rounds(*)),
   division:divisions(id, lesson_id, position, name),
   education:educations(${EDUCATION_COLUMNS})
 `;

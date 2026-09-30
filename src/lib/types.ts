@@ -18,6 +18,10 @@ export type Company = {
 export type Education = {
   id: string;
   company?: Company;
+  // axhub 상태. 직접 만든 교육은 없음
+  status?: string;
+  // axhub에서 온 항목은 동기화가 관리하므로 화면에서 만들기·수정·삭제를 막는다
+  synced: boolean;
   // axhub 원본 교육명. "[기업명] - 교육명" 형태이며, 화면에는 educationTitle()로 교육명만 보여준다.
   name: string;
 };
@@ -28,6 +32,7 @@ export type Round = {
   order: number;
   title: string;
   description: string;
+  synced: boolean;
 };
 
 export type Lesson = {
@@ -35,6 +40,7 @@ export type Lesson = {
   roundId: string;
   order: number;
   description: string;
+  synced: boolean;
 };
 
 // 분반. 차시 아래에 선택적으로 붙는다.

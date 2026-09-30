@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
 import type { BoardContext } from "@/lib/data";
 import type { BoardRole, Card, Section } from "@/lib/types";
-import { educationTitle } from "@/lib/education";
+import { educationTitle, roundLabel } from "@/lib/education";
 import { canEditCard, canManageBoard, canPost } from "@/lib/permissions";
 import ConfirmDialog from "@/components/app/ConfirmDialog";
 import { useBoardRealtime } from "@/components/board/useBoardRealtime";
@@ -148,7 +148,7 @@ export default function BoardView({
           items={[
             { label: rootLabel(mode), to: basePath(mode) },
             { label: educationTitle(education.name), to: educationPath(mode, education.id) },
-            { label: `${round.order}회차 · ${round.title}`, to: roundPath(mode, education.id, round.id) },
+            { label: roundLabel(round), to: roundPath(mode, education.id, round.id) },
             division
               ? { label: `${lesson.order}차시`, to: lessonPath(mode, education.id, round.id, lesson.id) }
               : { label: `${lesson.order}차시` },
@@ -160,7 +160,7 @@ export default function BoardView({
       <div className={(mode ? "mt-6 " : "") + "flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"}>
         <div>
           <div className="text-sm text-white/60">
-            {education.company?.name} · {educationTitle(education.name)} · {round.order}회차 {round.title}
+            {education.company?.name} · {educationTitle(education.name)} · {roundLabel(round)}
           </div>
           <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-white">{title}</h1>
           <p className="mt-2 text-white/60">{lesson.description}</p>

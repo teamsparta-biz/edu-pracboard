@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowUpRight, Link2 } from "lucide-react";
 import { getSessionUser, homePath } from "@/lib/auth";
 import { listMyBoards } from "@/lib/data";
-import { educationTitle } from "@/lib/education";
+import { educationTitle, roundLabel } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
@@ -56,7 +56,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                     {education.company?.name} · {educationTitle(education.name)}
                   </div>
                   <div className="mt-1 font-semibold">
-                    {round.order}회차 {lesson.order}차시{division ? ` · ${division.name}` : ""}
+                    {roundLabel(round)} · {lesson.order}차시{division ? ` · ${division.name}` : ""}
                   </div>
                 </div>
                 <Badge variant="outline">{roleLabel[role]}</Badge>

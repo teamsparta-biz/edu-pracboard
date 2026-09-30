@@ -10,6 +10,15 @@ import { notifyBoards, removeFiles } from "@/lib/board-events";
 export type ActionResult = { error?: string };
 
 const DENIED = "권한이 없거나 요청을 처리하지 못했어요.";
+const SYNCED = "axhub에서 가져온 항목은 axhub에서 수정해 주세요. 1시간마다 자동으로 반영돼요.";
+
+// axhub에서 온 교육·회차·차시는 동기화가 관리한다 (PLAN.md 3절)
+async function isSynced(table: "educations" | "rounds" | "lessons", id: string) {
+  const column = { educations: "axhub_course_id", rounds: "axhub_round_id", lessons: "axhub_key" }[table];
+  const supabase = await createClient();
+  const { data } = await supabase.from(table).select(column).eq("id", id).maybeSingle();
+  return !!(data as Record<string, unknown> | null)?.[column];
+}
 
 async function nextPosition(table: "rounds" | "lessons", column: string, id: string) {
   const supabase = await createClient();
@@ -28,6 +37,7 @@ export async function createRound(
   input: { title: string; description?: string },
 ): Promise<ActionResult> {
   await requireAdmin();
+  if (await isSynced("educations", educationId)) return { error: SYNCED };
   const supabase = await createClient();
   const { error } = await supabase.from("rounds").insert({
     education_id: educationId,
@@ -47,6 +57,7 @@ export async function createLesson(
   input: { description?: string },
 ): Promise<ActionResult> {
   await requireAdmin();
+  if (await isSynced("rounds", roundId)) return { error: SYNCED };
   const supabase = await createClient();
   const { data: lesson, error } = await supabase
     .from("lessons")
@@ -75,6 +86,7 @@ export async function updateRound(
   input: { title: string; description?: string },
 ): Promise<ActionResult> {
   await requireAdmin();
+  if (await isSynced("rounds", roundId)) return { error: SYNCED };
   const supabase = await createClient();
   const { error } = await supabase
     .from("rounds")
@@ -87,6 +99,7 @@ export async function updateRound(
 
 export async function updateLesson(lessonId: string, input: { description?: string }): Promise<ActionResult> {
   await requireAdmin();
+  if (await isSynced("lessons", lessonId)) return { error: SYNCED };
   const supabase = await createClient();
   const { error } = await supabase.from("lessons").update({ description: input.description ?? "" }).eq("id", lessonId);
   if (error) return { error: DENIED };
@@ -105,6 +118,7 @@ export async function deleteLesson(lessonId: string): Promise<ActionResult> {
 
 async function deleteWithBoards(table: "rounds" | "lessons", id: string): Promise<ActionResult> {
   await requireAdmin();
+  if (await isSynced(table, id)) return { error: SYNCED };
   const supabase = await createClient();
   const lessonIds =
     table === "lessons"

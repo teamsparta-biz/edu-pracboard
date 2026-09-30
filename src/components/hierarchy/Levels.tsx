@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Layers, LayoutGrid, Plus, Search, Users } from "lucide-react";
 import { createLesson, createRound, deleteLesson, deleteRound, updateLesson, updateRound } from "@/app/actions/admin";
-import { educationTitle } from "@/lib/education";
+import { educationStatusLabel, educationTitle, roundLabel } from "@/lib/education";
 import type { Board, Company, Division, Education, Lesson, Round } from "@/lib/types";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import LessonForm from "@/components/board/LessonForm";
@@ -61,6 +61,7 @@ function Header({
   title,
   description,
   company,
+  status,
   onCreate,
   createLabel,
   error,
@@ -69,10 +70,12 @@ function Header({
   title: string;
   description?: string;
   company?: Company;
+  status?: string;
   onCreate?: () => void;
   createLabel?: string;
   error?: string;
 }) {
+  const statusLabel = educationStatusLabel(status);
   return (
     <div className="mt-6 mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
       <div>
@@ -80,6 +83,7 @@ function Header({
         <div className="mt-2 flex items-center gap-2">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1>
           {mode === "client" && <ReadOnlyBadge />}
+          {statusLabel && <Badge variant={status === "stopped" ? "destructive" : "secondary"}>{statusLabel}</Badge>}
         </div>
         {description && <p className="mt-2 text-muted-foreground">{description}</p>}
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
@@ -130,8 +134,8 @@ function useCreate() {
 type Confirm = { title: string; description: string; run: () => void } | null;
 
 // 목록 행의 수정·삭제 메뉴 (관리자만). axhub에서 온 회차·차시는 다음 동기화 때 다시 덮어써질 수 있다.
-function rowMenu(mode: Mode, onEdit: () => void, onDelete: () => void) {
-  if (mode !== "admin") return undefined;
+function rowMenu(mode: Mode, synced: boolean, onEdit: () => void, onDelete: () => void) {
+  if (mode !== "admin" || synced) return undefined;
   return <ItemMenu className="text-muted-foreground hover:text-foreground hover:bg-muted" onEdit={onEdit} onDelete={onDelete} />;
 }
 
@@ -177,7 +181,8 @@ export function RoundList({
         mode={mode}
         title={educationTitle(education.name)}
         company={education.company}
-        onCreate={() => setFormOpen(true)}
+        status={education.status}
+        onCreate={education.synced ? undefined : () => setFormOpen(true)}
         createLabel="회차 만들기"
         error={error}
       />
@@ -192,7 +197,7 @@ export function RoundList({
               key={r.id}
               href={roundPath(mode, education.id, r.id)}
               order={r.order}
-              title={`${r.order}회차 · ${r.title}`}
+              title={roundLabel(r)}
               description={r.description}
               meta={
                 <>
@@ -201,6 +206,7 @@ export function RoundList({
               }
               action={rowMenu(
                 mode,
+                r.synced,
                 () => setEditing(r),
                 () =>
                   setConfirm({
@@ -258,6 +264,7 @@ export function LessonList({
   const menu = (l: Lesson & { divisionCount: number; board?: Board }) =>
     rowMenu(
       mode,
+      l.synced,
       () => setEditing(l),
       () =>
         setConfirm({
@@ -279,15 +286,15 @@ export function LessonList({
         items={[
           { label: rootLabel(mode), to: basePath(mode) },
           { label: educationTitle(education.name), to: educationPath(mode, education.id) },
-          { label: `${round.order}회차 · ${round.title}` },
+          { label: roundLabel(round) },
         ]}
       />
       <Header
         mode={mode}
-        title={`${round.order}회차 · ${round.title}`}
+        title={roundLabel(round)}
         description={round.description}
         company={education.company}
-        onCreate={() => setFormOpen(true)}
+        onCreate={round.synced ? undefined : () => setFormOpen(true)}
         createLabel="차시 만들기"
         error={error}
       />
@@ -376,7 +383,7 @@ export function DivisionList({
         items={[
           { label: rootLabel(mode), to: basePath(mode) },
           { label: educationTitle(education.name), to: educationPath(mode, education.id) },
-          { label: `${round.order}회차 · ${round.title}`, to: roundPath(mode, education.id, round.id) },
+          { label: roundLabel(round), to: roundPath(mode, education.id, round.id) },
           { label: `${lesson.order}차시` },
         ]}
       />

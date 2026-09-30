@@ -3,7 +3,7 @@ import { joinBoard } from "@/app/actions/auth";
 import { addInstructor, removeInstructor } from "@/app/actions/admin";
 import { getSessionUser } from "@/lib/auth";
 import { getBoardContents, getBoardPreview, getBoardRole, listInstructors, type BoardContext } from "@/lib/data";
-import { educationTitle } from "@/lib/education";
+import { educationTitle, roundLabel } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
@@ -12,7 +12,7 @@ import EmailRoster from "@/components/hierarchy/EmailRoster";
 import JoinBoard from "@/components/board/JoinBoard";
 
 const boardTitle = ({ round, lesson, division, education }: BoardContext) => ({
-  subtitle: `${educationTitle(education.name)} · ${round.order}회차`,
+  subtitle: `${educationTitle(education.name)} · ${roundLabel(round)}`,
   title: `${lesson.order}차시${division ? ` · ${division.name}` : ""} 보드`,
 });
 
