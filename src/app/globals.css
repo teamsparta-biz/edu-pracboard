@@ -123,6 +123,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* 한국어를 단어(어절) 단위로 줄바꿈한다. 이메일·URL처럼 긴 한 덩어리는 넘칠 때만 끊는다. */
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
   html {
     @apply font-sans;

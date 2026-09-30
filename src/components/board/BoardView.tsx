@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Lock, Pencil, Plus, Trash2, MessagesSquare, ChevronLeft, ChevronRight } from "lucide-react";
+import { Lock, Pencil, Plus, Settings2, Trash2, MessagesSquare, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   addCard,
   addSection,
@@ -19,6 +19,7 @@ import type { BoardRole, Card, Section } from "@/lib/types";
 import { educationTitle, roundLabel } from "@/lib/education";
 import { canEditCard, canManageBoard, canPost } from "@/lib/permissions";
 import ConfirmDialog from "@/components/app/ConfirmDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useBoardRealtime } from "@/components/board/useBoardRealtime";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import BoardCard from "@/components/board/BoardCard";
@@ -32,8 +33,8 @@ type Props = BoardContext & {
   cards: Card[];
   role: BoardRole;
   userId: string;
-  // 보드 아래에 붙는 관리 영역 (관리자의 강사 목록)
-  children?: React.ReactNode;
+  // 제목 오른쪽 버튼 줄에 붙는 관리 버튼 (관리자의 강사 목록)
+  headerActions?: React.ReactNode;
 };
 
 export default function BoardView({
@@ -46,7 +47,7 @@ export default function BoardView({
   cards: allCards,
   role,
   userId,
-  children,
+  headerActions,
 }: Props) {
   const [rawSectionIndex, setSectionIndex] = useState(0);
   const [cardFormOpen, setCardFormOpen] = useState(false);
@@ -166,7 +167,8 @@ export default function BoardView({
           <p className="mt-2 text-white/60">{lesson.description}</p>
         </div>
 
-        <div className="flex items-center gap-2 self-start">
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {headerActions}
           {readOnly && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 text-white text-sm px-4 py-2">
               <Lock className="w-3.5 h-3.5" /> 읽기 전용
@@ -198,34 +200,29 @@ export default function BoardView({
             <button
               onClick={() => setCardFormOpen(true)}
               disabled={!section}
-              className="inline-flex items-center gap-2 bg-white text-[#591a2e] px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-2 whitespace-nowrap bg-white text-[#591a2e] px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
             >
               <Plus className="w-4 h-4" /> 자료 올리기
             </button>
           )}
+          {/* 섹션 추가·이름 변경·삭제는 하나의 메뉴로 묶는다. 버튼 네 개를 늘어놓으면 좁은 화면에서 깨진다. */}
           {manage && (
-            <>
-              <button
-                onClick={() => setSectionForm("rename")}
-                disabled={!section}
-                className="inline-flex items-center gap-2 border border-white/20 text-white/80 px-4 py-2 rounded-full text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <Pencil className="w-4 h-4" /> 이름 변경
-              </button>
-              <button
-                onClick={handleDeleteSection}
-                disabled={sections.length <= 1 || pending}
-                className="inline-flex items-center gap-2 border border-white/20 text-white/80 px-4 py-2 rounded-full text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <Trash2 className="w-4 h-4" /> 섹션 삭제
-              </button>
-              <button
-                onClick={() => setSectionForm("add")}
-                className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> 섹션 추가
-              </button>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-2 whitespace-nowrap bg-white/10 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-white/20 transition-colors">
+                <Settings2 className="w-4 h-4" /> 섹션 관리
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem onClick={() => setSectionForm("add")}>
+                  <Plus /> 섹션 추가
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!section} onClick={() => setSectionForm("rename")}>
+                  <Pencil /> 이름 변경
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" disabled={sections.length <= 1 || pending} onClick={handleDeleteSection}>
+                  <Trash2 /> 섹션 삭제
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
@@ -287,8 +284,6 @@ export default function BoardView({
           </div>
         )}
       </div>
-
-      {children && <div className="mt-12 max-w-2xl">{children}</div>}
 
       {post && (
         <CardForm

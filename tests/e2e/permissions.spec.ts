@@ -53,7 +53,7 @@ test("강사는 섹션을 관리하고 교육생 카드도 지울 수 있다", a
   await signIn(tutor, tutorEmail);
   await expect(tutor).toHaveURL(boardUrl(f));
   await expect(tutor.getByText("강사", { exact: true })).toBeVisible();
-  await expect(tutor.getByRole("button", { name: "섹션 추가" })).toBeVisible();
+  await expect(tutor.getByRole("button", { name: "섹션 관리" })).toBeVisible();
 
   await tutor.getByRole("button", { name: "카드 메뉴" }).click();
   await expect(tutor.getByRole("menuitem", { name: "삭제" })).toBeVisible();
@@ -69,7 +69,7 @@ test("교육생은 다른 사람 카드를 고칠 수 없고 섹션도 관리할
   await joinBoard(student, f, "다른교육생", f.email("student"));
   await expect(student.getByText("남의 카드")).toBeVisible();
   await expect(student.getByRole("button", { name: "카드 메뉴" })).toHaveCount(0);
-  await expect(student.getByRole("button", { name: "섹션 추가" })).toHaveCount(0);
+  await expect(student.getByRole("button", { name: "섹션 관리" })).toHaveCount(0);
 });
 
 test("다른 보드의 교육생은 이 보드 내용을 볼 수 없고 참여 여부를 묻는다", async ({ browser }) => {

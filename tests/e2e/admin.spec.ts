@@ -28,6 +28,7 @@ test("관리자가 등록한 고객사 담당자는 이메일만으로 그 교�
   const admin = await newPage(browser, { admin: true });
   await admin.goto(`/admin/educations/${manual.educationId}`);
   const viewer = manual.email("viewer");
+  await admin.getByRole("button", { name: "고객사 담당자 0명" }).click();
   await admin.getByPlaceholder("담당자 이메일 (예: hr@company.com)").fill(viewer);
   await admin.getByRole("button", { name: "등록" }).click();
   await expect(admin.getByText(viewer)).toBeVisible();

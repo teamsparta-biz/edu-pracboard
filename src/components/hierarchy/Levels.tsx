@@ -65,6 +65,7 @@ function Header({
   onCreate,
   createLabel,
   error,
+  actions,
 }: {
   mode: Mode;
   title: string;
@@ -74,6 +75,7 @@ function Header({
   onCreate?: () => void;
   createLabel?: string;
   error?: string;
+  actions?: React.ReactNode;
 }) {
   const statusLabel = educationStatusLabel(status);
   return (
@@ -88,13 +90,18 @@ function Header({
         {description && <p className="mt-2 text-muted-foreground">{description}</p>}
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       </div>
-      {mode === "admin" && onCreate && (
-        <button
-          onClick={onCreate}
-          className="inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition-opacity self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" /> {createLabel}
-        </button>
+      {(actions || (mode === "admin" && onCreate)) && (
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {actions}
+          {mode === "admin" && onCreate && (
+            <button
+              onClick={onCreate}
+              className="inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="w-4 h-4" /> {createLabel}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -156,12 +163,13 @@ export function RoundList({
   mode,
   education,
   rounds,
-  children,
+  actions,
 }: {
   mode: Mode;
   education: Education;
   rounds: (Round & { lessonCount: number })[];
-  children?: React.ReactNode;
+  // 제목 오른쪽 버튼 줄 (관리자의 고객사 담당자 목록)
+  actions?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -185,8 +193,8 @@ export function RoundList({
         onCreate={education.synced ? undefined : () => setFormOpen(true)}
         createLabel="회차 만들기"
         error={error}
+        actions={actions}
       />
-      {children}
       <SearchBox value={query} onChange={setQuery} placeholder="회차 검색 (제목, 설명)" />
       {filtered.length === 0 ? (
         <Empty>{q ? "검색 결과가 없어요." : "아직 만들어진 회차가 없어요."}</Empty>

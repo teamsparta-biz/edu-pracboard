@@ -5,11 +5,13 @@ type Props = {
   icon: LucideIcon;
   title: string;
   description?: string;
+  // 설명 아래 한 줄 더 (예: 참여할 계정)
+  detail?: string;
   // formAction: 서버 컴포넌트에서 서버 액션을 실행할 때
   action?: { label: string; href?: string; formAction?: () => Promise<void> };
 };
 
-export default function Notice({ icon: Icon, title, description, action }: Props) {
+export default function Notice({ icon: Icon, title, description, detail, action }: Props) {
   const actionClass =
     "mt-6 inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition-opacity";
   return (
@@ -20,6 +22,7 @@ export default function Notice({ icon: Icon, title, description, action }: Props
         </div>
         <h1 className="mt-4 text-lg font-semibold">{title}</h1>
         {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
+        {detail && <p className="mt-3 text-sm text-foreground">{detail}</p>}
         {action?.href && (
           <Link href={action.href} className={actionClass}>
             {action.label}

@@ -34,18 +34,25 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
       return (
         <div className="min-h-screen flex flex-col bg-[#591a2e]">
           <AppHeader user={user} roleLabel={roleLabel[role]} variant="light" />
-          <BoardView {...contents} role={role} userId={user.id}>
-            {role === "admin" && (
-              <EmailRoster
-                title="강사"
-                description="등록된 이메일로 로그인하면 이 보드의 섹션과 카드를 관리할 수 있어요. axhub 배정은 자동으로 추가돼요."
-                placeholder="강사 이메일"
-                members={instructors}
-                onAdd={addInstructor.bind(null, boardId)}
-                onRemove={removeInstructor.bind(null, boardId)}
-              />
-            )}
-          </BoardView>
+          <BoardView
+            {...contents}
+            role={role}
+            userId={user.id}
+            headerActions={
+              role === "admin" && (
+                <EmailRoster
+                  key="instructors"
+                  variant="board"
+                  title="강사"
+                  description="등록된 이메일로 로그인하면 이 보드의 섹션과 카드를 관리할 수 있어요. axhub의 주강사 배정은 자동으로 추가돼요."
+                  placeholder="강사 이메일"
+                  members={instructors}
+                  onAdd={addInstructor.bind(null, boardId)}
+                  onRemove={removeInstructor.bind(null, boardId)}
+                />
+              )
+            }
+          />
         </div>
       );
     }
@@ -65,7 +72,8 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
       <Notice
         icon={LogIn}
         title={`${title}에 참여할까요?`}
-        description={`${subtitle} · ${user.email} 계정으로 교육생으로 참여해요.`}
+        description={`${subtitle}`}
+        detail={`${user.email} 계정으로 교육생으로 참여해요.`}
         action={{ label: "참여하기", formAction: joinBoard.bind(null, boardId) }}
       />
     );

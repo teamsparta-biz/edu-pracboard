@@ -17,7 +17,8 @@ export function attachmentKind(type: string): AttachmentKind {
 export function formatBytes(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  const mb = bytes / 1024 / 1024;
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)}MB`;
 }
 
 // 실시간 반영 채널. 내용 없이 "바뀌었다"는 신호만 보내고, 받은 쪽이 서버에서 다시 읽는다.

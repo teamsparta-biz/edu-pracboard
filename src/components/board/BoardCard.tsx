@@ -32,7 +32,10 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen }: Props) {
 
       <div className="p-4 flex flex-col flex-1">
         <h3 className="font-semibold text-sm line-clamp-1">{card.title}</h3>
-        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 flex-1">{card.content}</p>
+        {/* 문단 자체가 늘어나면 두 줄 제한 아래로 다음 줄이 보이므로, 남는 높이는 감싼 div가 받는다 */}
+        <div className="flex-1">
+          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{card.content}</p>
+        </div>
         {card.link && (
           <a
             href={card.link}

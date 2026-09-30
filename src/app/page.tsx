@@ -52,10 +52,9 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 className="group flex items-center gap-4 bg-white rounded-2xl border border-border p-5 hover:shadow-md transition-all"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-muted-foreground truncate">
-                    {education.company?.name} · {educationTitle(education.name)}
-                  </div>
-                  <div className="mt-1 font-semibold">
+                  {education.company && <div className="text-xs text-muted-foreground truncate">{education.company.name}</div>}
+                  <div className="mt-0.5 font-semibold">{educationTitle(education.name)}</div>
+                  <div className="mt-0.5 text-sm text-muted-foreground">
                     {roundLabel(round)} · {lesson.order}차시{division ? ` · ${division.name}` : ""}
                   </div>
                 </div>
