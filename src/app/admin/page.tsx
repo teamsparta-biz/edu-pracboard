@@ -5,10 +5,10 @@ import { getLastSync, listEducations } from "@/lib/data";
 import EducationList from "@/components/hierarchy/EducationList";
 import SyncPanel from "@/components/hierarchy/SyncPanel";
 
-export default async function AdminHome() {
-  const [educations, last] = await Promise.all([listEducations(), getLastSync()]);
+export default async function AdminHome({ searchParams }: PageProps<"/admin">) {
+  const [educations, last, { tab }] = await Promise.all([listEducations(), getLastSync(), searchParams]);
   return (
-    <EducationList mode="admin" educations={educations}>
+    <EducationList mode="admin" educations={educations} initialTab={typeof tab === "string" ? tab : undefined}>
       <SyncPanel last={last} />
     </EducationList>
   );

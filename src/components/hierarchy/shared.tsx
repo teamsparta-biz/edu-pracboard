@@ -19,8 +19,9 @@ export const lessonPath = (mode: Mode, educationId: string, roundId: string, les
   `${roundPath(mode, educationId, roundId)}/lessons/${lessonId}`;
 export const boardPath = (boardId: string) => `/b/${boardId}`;
 
-export function PageContainer({ children }: { children: React.ReactNode }) {
-  return <div className="w-full max-w-6xl mx-auto px-6 py-10">{children}</div>;
+// wide: 카드를 한 줄에 4개 두는 교육 목록용
+export function PageContainer({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
+  return <div className={`w-full ${wide ? "max-w-7xl" : "max-w-6xl"} mx-auto px-6 py-10`}>{children}</div>;
 }
 
 // 고객사별 색을 따로 저장하지 않으므로 이름에서 색을 정한다.
@@ -35,14 +36,14 @@ function chipColor(name: string) {
 export function CompanyChip({ company }: { company?: Company }) {
   if (!company) return null;
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 min-w-0 text-xs font-medium text-muted-foreground">
       <span
-        className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
+        className="w-5 h-5 shrink-0 rounded-md flex items-center justify-center text-[10px] font-bold"
         style={{ backgroundColor: chipColor(company.name), color: "#fff" }}
       >
         {company.name.charAt(0)}
       </span>
-      {company.name}
+      <span className="truncate">{company.name}</span>
     </span>
   );
 }

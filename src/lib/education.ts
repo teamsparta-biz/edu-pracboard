@@ -26,3 +26,25 @@ export function educationStatusLabel(status?: string | null) {
       return null;
   }
 }
+
+// 관리자 첫 화면의 탭 구분. 중단된 교육은 종료에, 상태가 없는 직접 만든 교육은 교육 중에 둔다.
+export type EducationPhase = "setup" | "operation" | "ended";
+
+export const EDUCATION_PHASES: { key: EducationPhase; label: string }[] = [
+  { key: "setup", label: "교육 준비" },
+  { key: "operation", label: "교육 중" },
+  { key: "ended", label: "교육 종료" },
+];
+
+export function educationPhase(status?: string | null): EducationPhase {
+  switch (status) {
+    case "setup":
+      return "setup";
+    case "tax_invoice":
+    case "closed":
+    case "stopped":
+      return "ended";
+    default:
+      return "operation";
+  }
+}
