@@ -339,7 +339,7 @@ export function LessonList({
                   </>
                 }
                 action={
-                  mode === "admin" ? (
+                  mode !== "client" ? (
                     <>
                       {l.board && <CopyUrlButton boardId={l.board.id} />}
                       {menu(l)}
@@ -413,7 +413,7 @@ export function DivisionList({
                     <LayoutGrid className="w-3.5 h-3.5" /> 자료 {d.board.cardCount}
                   </>
                 }
-                action={mode === "admin" ? <CopyUrlButton boardId={d.board.id} /> : undefined}
+                action={mode !== "client" ? <CopyUrlButton boardId={d.board.id} /> : undefined}
               />
             ),
         )}

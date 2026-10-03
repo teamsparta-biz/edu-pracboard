@@ -52,7 +52,19 @@ export async function homePath(user: SessionUser) {
     .select("education_id", { count: "exact", head: true })
     .eq("email", user.email);
   if (count) return "/client";
+  if (await isInstructor(user.email)) return "/instructor";
   return "/";
+}
+
+// 강사로 등록된 보드가 하나라도 있는지 (강사 화면 입장 조건)
+export async function isInstructor(email: string) {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("board_members")
+    .select("board_id", { count: "exact", head: true })
+    .eq("email", email)
+    .eq("role", "instructor");
+  return !!count;
 }
 
 export async function getOrigin() {

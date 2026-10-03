@@ -66,8 +66,10 @@ test("화면 캡처", async ({ browser }) => {
   await shoot(anon, "01-login");
   await anon.goto(boardUrl(f));
   await shoot(anon, "02-join");
-  await anon.getByRole("button", { name: "이메일로 들어가기" }).click();
-  await shoot(anon, "03-join-login-mode");
+  await anon.getByLabel("이메일").fill(f.email("newcomer"));
+  await anon.getByRole("button", { name: "들어가기" }).click();
+  await expect(anon.getByLabel("이름")).toBeVisible();
+  await shoot(anon, "03-join-name-step");
   await anon.goto("/b/00000000-0000-0000-0000-000000000000");
   await shoot(anon, "04-board-not-found");
 
@@ -122,6 +124,8 @@ test("화면 캡처", async ({ browser }) => {
   const tutorEmail = f.email("tutor");
   await registerInstructor(f, tutorEmail);
   await signIn(tutor, tutorEmail);
+  await shoot(tutor, "19-instructor-home");
+  await tutor.goto(boardUrl(f));
   await shoot(tutor, "20-board-instructor");
   await tutor.getByRole("button", { name: "섹션 관리" }).click();
   await shoot(tutor, "21-section-menu");

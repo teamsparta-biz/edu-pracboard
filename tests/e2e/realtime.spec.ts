@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createFixture, joinBoard, newPage, registerInstructor, signIn, type Fixture } from "./helpers";
+import { boardUrl, createFixture, joinBoard, newPage, registerInstructor, signIn, type Fixture } from "./helpers";
 
 // 같은 보드를 보고 있는 다른 화면에 새로고침 없이 반영된다 (PLAN.md 5.1절)
 
@@ -16,6 +16,7 @@ test("교육생이 올린 카드가 강사 화면에 새로고침 없이 나타�
   const tutorEmail = f.email("tutor");
   await registerInstructor(f, tutorEmail);
   await signIn(tutor, tutorEmail);
+  await tutor.goto(boardUrl(f));
   await expect(tutor.getByText("· 0개")).toBeVisible();
   // 실시간 채널이 붙을 시간을 준다
   await tutor.waitForTimeout(1500);

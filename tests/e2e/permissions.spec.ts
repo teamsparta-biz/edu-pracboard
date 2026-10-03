@@ -51,7 +51,17 @@ test("강사는 섹션을 관리하고 교육생 카드도 지울 수 있다", a
   const tutorEmail = f.email("tutor");
   await registerInstructor(f, tutorEmail);
   await signIn(tutor, tutorEmail);
+
+  // 강사 화면: 배정된 교육만 보이고, 교육 → 회차 → 차시 순으로 보드까지 내려간다
+  await expect(tutor).toHaveURL("/instructor");
+  await expect(tutor.getByText(`실습 교육 ${other.tag}`)).toHaveCount(0);
+  await tutor.getByRole("heading", { name: `실습 교육 ${f.tag}` }).click();
+  await tutor.waitForURL(`/instructor/educations/${f.educationId}`);
+  await tutor.getByRole("link", { name: /1회차/ }).click();
+  await tutor.waitForURL(`/instructor/educations/${f.educationId}/rounds/${f.roundId}`);
+  await tutor.getByRole("link", { name: /1차시/ }).click();
   await expect(tutor).toHaveURL(boardUrl(f));
+  await expect(tutor.getByRole("link", { name: "내 교육" })).toBeVisible();
   await expect(tutor.getByText("강사", { exact: true })).toBeVisible();
   await expect(tutor.getByRole("button", { name: "섹션 관리" })).toBeVisible();
 

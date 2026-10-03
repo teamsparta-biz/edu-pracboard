@@ -6,9 +6,10 @@ import Notice from "@/components/app/Notice";
 import { Badge } from "@/components/ui/badge";
 import type { Company } from "@/lib/types";
 
-export type Mode = "admin" | "client";
+// admin: 전체 교육 / client: 고객사 담당자, 열람 권한이 있는 교육 / instructor: 강사, 배정된 보드로 가는 경로만
+export type Mode = "admin" | "client" | "instructor";
 
-export const basePath = (mode: Mode) => (mode === "admin" ? "/admin" : "/client");
+export const basePath = (mode: Mode) => `/${mode}`;
 export const rootLabel = (mode: Mode) => (mode === "admin" ? "전체 교육" : "내 교육");
 
 export const educationPath = (mode: Mode, educationId: string) =>

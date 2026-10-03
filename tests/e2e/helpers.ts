@@ -124,11 +124,12 @@ export async function seedCard(f: Fixture, authorEmail: string, title: string) {
 
 export const boardUrl = (f: Fixture) => `/b/${f.boardId}`;
 
-// 보드 URL에서 이름과 이메일로 참여 (교육생)
+// 보드 URL에서 처음 참여 (교육생): 이메일 → 처음 보는 이메일이라 이름을 더 입력
 export async function joinBoard(page: Page, f: Fixture, name: string, email: string) {
   await page.goto(boardUrl(f));
-  await page.getByLabel("이름").fill(name);
   await page.getByLabel("이메일").fill(email);
+  await page.getByRole("button", { name: "들어가기" }).click();
+  await page.getByLabel("이름").fill(name);
   await page.getByRole("button", { name: "참여하기" }).click();
   await expect(page.getByRole("button", { name: "자료 올리기" })).toBeVisible();
 }
@@ -144,7 +145,8 @@ export async function signIn(page: Page, email: string) {
 export async function signOut(page: Page) {
   await page.getByRole("banner").getByRole("button").last().click();
   await page.getByRole("menuitem", { name: "로그아웃" }).click();
-  await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
+  // 보드에서 로그아웃하면 그 보드의 입장 화면, 그 외에는 로그인 화면
+  await expect(page.getByRole("button", { name: /^(들어가기|로그인)$/ })).toBeVisible();
 }
 
 export async function newPage(browser: Browser, { admin = false } = {}) {

@@ -254,6 +254,22 @@ export async function listMyBoards(email: string) {
     .map((row) => ({ ...toBoardContext(row.board), role: row.role as BoardRole }));
 }
 
+// 강사로 등록된 보드와 그 상위 계층 (강사 화면). RLS로는 교육 전체 계층이 보이지만,
+// 강사 화면에는 자기 보드로 가는 경로만 보여준다 (src/lib/instructor.ts).
+export async function listInstructorBoards(email: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("board_members")
+    .select(`board:boards(${BOARD_CONTEXT_COLUMNS}, cards(count))`)
+    .eq("email", email)
+    .eq("role", "instructor");
+  return (data ?? [])
+    .filter((row) => row.board)
+    .map((row) => ({ ...toBoardContext(row.board), cardCount: countOf((row.board as { cards?: unknown }).cards) }));
+}
+
+export type InstructorBoard = Awaited<ReturnType<typeof listInstructorBoards>>[number];
+
 // 서명 URL은 발급할 때마다 달라져서, 그대로 쓰면 실시간 반영으로 다시 읽을 때마다 브라우저가
 // 이미지·동영상을 전부 새로 받는다. 같은 파일에는 남은 시간이 넉넉한 동안 같은 URL을 다시 쓴다.
 // 서버 인스턴스별 메모리 캐시다. 접근 권한은 이 함수를 부르기 전에 RLS로 카드를 읽으며 이미 확인했다.

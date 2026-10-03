@@ -43,17 +43,24 @@ export async function signInWithEmail(_: FormResult, formData: FormData): Promis
   redirect(next);
 }
 
-// 보드 URL에서 참여. 처음이면 계정이 만들어지고, 들어온 보드의 교육생이 된다.
-export async function joinWithEmail(_: FormResult, formData: FormData): Promise<FormResult> {
+// needName: 처음 보는 이메일이라 이름을 더 받아야 한다
+export type EnterResult = FormResult & { needName?: boolean };
+
+// 보드 URL의 입장 화면. 이메일을 먼저 받는다.
+// 이미 계정이 있거나 강사·고객사 담당자로 등록된 이메일이면 바로 들어가고,
+// 처음 보는 이메일이면 이름을 받아 계정을 만든다. 어느 쪽이든 들어온 보드에 참여한다.
+export async function enterBoard(_: EnterResult, formData: FormData): Promise<EnterResult> {
   const boardId = String(formData.get("boardId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const email = normalizeEmail(formData.get("email"));
   const values = { name, email };
-  if (!name) return { error: "이름을 입력해 주세요.", values };
   if (!isEmail(email)) return { error: "이메일 형식을 확인해 주세요.", values };
   if (isAdminEmail(email)) return { error: ADMIN_USE_GOOGLE, values };
 
-  if (!(await ensureUser(createAdminClient(), email, name))) return { error: FAILED, values };
+  const known = !!(await findProfile(email)) || (await isRegistered(email));
+  if (!known && !name) return { needName: true, values };
+
+  if (!(await ensureUser(createAdminClient(), email, name || undefined))) return { error: FAILED, values };
   if (!(await startSession(email))) return { error: FAILED, values };
 
   await joinBoardById(boardId);
@@ -75,10 +82,12 @@ export async function signInWithGoogle(formData: FormData) {
   redirect(data.url);
 }
 
-export async function signOut() {
+// 보드에서 로그아웃하면 그 보드의 입장 화면으로, 그 외에는 로그인 화면으로 간다.
+export async function signOut(from?: string) {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/");
+  const next = safeNext(from ?? "/");
+  redirect(next.startsWith("/b/") ? next : "/");
 }
 
 export async function joinBoard(boardId: string) {

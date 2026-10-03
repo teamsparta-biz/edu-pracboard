@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronDown, LogOut } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/types";
@@ -23,6 +24,7 @@ type Props = {
 
 export default function AppHeader({ user, roleLabel, variant = "default" }: Props) {
   const isLight = variant === "light";
+  const pathname = usePathname();
 
   return (
     <header
@@ -71,7 +73,7 @@ export default function AppHeader({ user, roleLabel, variant = "default" }: Prop
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => signOut()}>
+              <DropdownMenuItem variant="destructive" onClick={() => signOut(pathname)}>
                 <LogOut /> 로그아웃
               </DropdownMenuItem>
             </DropdownMenuContent>

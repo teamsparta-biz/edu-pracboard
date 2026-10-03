@@ -75,9 +75,9 @@ export default function BoardView({
 
   const title = `${lesson.order}차시${division ? ` · ${division.name}` : ""}`;
 
-  // 관리자·고객사 담당자는 상위 계층에서 들어오므로 경로를 보여주고,
-  // 강사·교육생은 이 URL만 보므로 경로 없이 교육 정보만 보여준다.
-  const mode = role === "admin" ? "admin" : role === "viewer" ? "client" : null;
+  // 관리자·고객사 담당자·강사는 상위 계층에서 들어오므로 경로를 보여주고,
+  // 교육생은 이 URL만 보므로 경로 없이 교육 정보만 보여준다.
+  const mode = role === "admin" ? "admin" : role === "viewer" ? "client" : role === "instructor" ? "instructor" : null;
 
   function run(action: () => Promise<{ error?: string }>, after?: () => void) {
     startTransition(async () => {

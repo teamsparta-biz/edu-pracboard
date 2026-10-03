@@ -16,7 +16,7 @@ import { CompanyChip, PageContainer, ReadOnlyBadge, educationPath, type Mode } f
 
 type EducationItem = Education & { roundCount: number; boardCount: number };
 
-// 목록은 RLS로 이미 걸러져 온다 (관리자: 전체, 고객사 담당자: 열람 권한이 있는 교육).
+// 목록은 이미 걸러져 온다 (관리자: 전체, 고객사 담당자: 열람 권한이 있는 교육, 강사: 배정된 교육).
 export default function EducationList({
   mode,
   educations,
@@ -46,7 +46,7 @@ export default function EducationList({
   const searched = q
     ? educations.filter((e) => [e.name, e.company?.name ?? ""].some((v) => v.toLowerCase().includes(q)))
     : educations;
-  // 고객사 담당자는 볼 수 있는 교육이 적어서 탭 없이 전부 보여준다.
+  // 고객사 담당자·강사는 볼 수 있는 교육이 적어서 탭 없이 전부 보여준다.
   const filtered = isAdmin ? searched.filter((e) => educationPhase(e.status) === tab) : searched;
 
   return (
@@ -56,10 +56,14 @@ export default function EducationList({
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             {isAdmin ? "전체 교육" : "내 교육"}
           </h1>
-          {!isAdmin && <ReadOnlyBadge />}
+          {mode === "client" && <ReadOnlyBadge />}
         </div>
         <p className="mt-2 text-muted-foreground">
-          {isAdmin ? `생성된 모든 교육 ${educations.length}개` : "열람 권한이 있는 교육만 표시돼요."}
+          {isAdmin
+            ? `생성된 모든 교육 ${educations.length}개`
+            : mode === "instructor"
+              ? "강사로 배정된 교육만 표시돼요."
+              : "열람 권한이 있는 교육만 표시돼요."}
         </p>
       </div>
 
