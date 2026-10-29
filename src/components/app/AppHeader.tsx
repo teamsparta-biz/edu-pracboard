@@ -30,7 +30,7 @@ export default function AppHeader({ user, roleLabel, variant = "default" }: Prop
     <header
       className={
         "border-b " +
-        (isLight ? "border-white/10 text-white" : "border-border bg-white")
+        (isLight ? "border-transparent bg-board text-white" : "border-border bg-white")
       }
     >
       <div className="max-w-[1800px] mx-auto px-6 lg:px-12 h-14 flex items-center justify-between">

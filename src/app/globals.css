@@ -5,8 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* 보드 배경 (팀스파르타 레드). 흰 글씨 대비가 4.6:1이라 보조 글씨도 흰색 80% 이상으로 둔다 */
+  /* 보드 화면: 팀스파르타 레드는 상단 띠·주요 버튼·고정 표시에만 쓰고, 배경은 눈이 편한 웜화이트로 둔다 */
   --color-board: #e42019;
+  --color-board-bg: #faf6f5;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);

@@ -217,7 +217,6 @@ export default function BoardView({
       )}
       {mode && (
         <Breadcrumb
-          variant="light"
           items={[
             { label: rootLabel(mode), to: basePath(mode) },
             { label: educationTitle(education.name), to: educationPath(mode, education.id) },
@@ -232,37 +231,37 @@ export default function BoardView({
 
       <div className={(mode ? "mt-6 " : "") + "flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"}>
         <div>
-          <div className="text-sm text-white/85">
+          <div className="text-sm text-muted-foreground">
             {education.company?.name} · {educationTitle(education.name)} · {roundLabel(round)}
           </div>
-          <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-white">{title}</h1>
-          <p className="mt-2 text-white/85">{lesson.description}</p>
+          <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{title}</h1>
+          <p className="mt-2 text-muted-foreground">{lesson.description}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start">
           {headerActions}
           {readOnly && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 text-white text-sm px-4 py-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted text-muted-foreground text-sm px-4 py-2">
               <Lock className="w-3.5 h-3.5" /> 읽기 전용
             </span>
           )}
           {manage && (
             <CopyUrlButton
               boardId={board.id}
-              className="border-white/20 text-white/80 hover:text-white hover:bg-white/10 px-4 py-2 text-sm"
+              className="bg-white px-4 py-2 text-sm"
             />
           )}
         </div>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-white">
+        <div className="flex items-center gap-2 text-foreground">
           <MessagesSquare className="w-5 h-5" />
           {/* 섹션이 여럿이면 이름을 눌러 원하는 섹션으로 바로 간다 */}
           {sections.length > 1 ? (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md -mx-1.5 px-1.5 py-0.5 font-semibold hover:bg-white/10 transition-colors">
-                {section?.name} <ChevronDown className="w-4 h-4 text-white/85" />
+              <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md -mx-1.5 px-1.5 py-0.5 font-semibold hover:bg-black/5 transition-colors">
+                {section?.name} <ChevronDown className="w-4 h-4 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-y-auto">
                 {sections.map((s, i) => (
@@ -278,11 +277,11 @@ export default function BoardView({
             <span className="font-semibold">{section?.name ?? "섹션 없음"}</span>
           )}
           {section && (
-            <span className="text-sm text-white/80">
+            <span className="text-sm text-muted-foreground">
               · {cards.length}개 · {sectionIndex + 1}/{sections.length}
             </span>
           )}
-          {pending && <span className="text-sm text-white/80">· 저장 중...</span>}
+          {pending && <span className="text-sm text-muted-foreground">· 저장 중...</span>}
         </div>
 
         <div className="flex items-center gap-2">
@@ -290,7 +289,7 @@ export default function BoardView({
             <button
               onClick={() => setCardFormOpen(true)}
               disabled={!section}
-              className="inline-flex items-center gap-2 whitespace-nowrap bg-white text-board px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-2 whitespace-nowrap bg-board text-white px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
             >
               <Plus className="w-4 h-4" /> 자료 올리기
             </button>
@@ -298,7 +297,7 @@ export default function BoardView({
           {/* 섹션 추가·이름 변경·삭제는 하나의 메뉴로 묶는다. 버튼 네 개를 늘어놓으면 좁은 화면에서 깨진다. */}
           {manage && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center gap-2 whitespace-nowrap bg-white/10 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-white/20 transition-colors">
+              <DropdownMenuTrigger className="inline-flex items-center gap-2 whitespace-nowrap bg-white border border-border text-foreground px-4 py-2 rounded-full text-sm font-medium hover:bg-muted transition-colors">
                 <Settings2 className="w-4 h-4" /> 섹션 관리
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
@@ -317,14 +316,14 @@ export default function BoardView({
         </div>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-200">{error}</p>}
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
       <div className="relative mt-6 px-0 sm:px-20 min-h-[340px]">
         {hasPrev && (
           <button
             onClick={() => setSectionIndex(sectionIndex - 1)}
             aria-label="이전 섹션"
-            className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -333,15 +332,15 @@ export default function BoardView({
           <button
             onClick={() => setSectionIndex(sectionIndex + 1)}
             aria-label="다음 섹션"
-            className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         )}
 
         {!section ? (
-          <div className="text-center py-20 border-2 border-dashed border-white/15 rounded-2xl">
-            <p className="text-white/80">아직 만들어진 섹션이 없어요.</p>
+          <div className="text-center py-20 border-2 border-dashed border-border rounded-2xl">
+            <p className="text-muted-foreground">아직 만들어진 섹션이 없어요.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
@@ -365,7 +364,7 @@ export default function BoardView({
               <button
                 onClick={() => setSectionIndex(sectionIndex - 1)}
                 aria-label="이전 섹션"
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -374,7 +373,7 @@ export default function BoardView({
               <button
                 onClick={() => setSectionIndex(sectionIndex + 1)}
                 aria-label="다음 섹션"
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-white/10 text-white"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

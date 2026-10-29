@@ -44,7 +44,7 @@ export default function EmailRoster({ title, description, placeholder, members, 
 
   const trigger =
     variant === "board"
-      ? "border-white/20 text-white/80 hover:text-white hover:bg-white/10"
+      ? "border-border bg-white text-foreground hover:bg-muted"
       : "border-border bg-white text-foreground hover:bg-muted";
 
   return (
