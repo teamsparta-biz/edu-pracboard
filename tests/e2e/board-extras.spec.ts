@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { createFixture, joinBoard, registerViewer, seedCard, service, signIn, boardUrl, type Fixture } from "./helpers";
+import { createFixture, joinBoard, registerInstructor, registerViewer, seedCard, service, signIn, boardUrl, type Fixture } from "./helpers";
 
-// 2026-10-29 QA 요구사항: 하트·댓글, 섹션 바로 이동, 드래그 앤 드롭 업로드
+// 2026-10-29 QA 요구사항: 하트·댓글, 섹션 바로 이동, 드래그 앤 드롭 업로드, 관리자·강사 카드 상단 고정
 
 let f: Fixture;
 test.beforeEach(async () => {
@@ -71,4 +71,25 @@ test("섹션 목록에서 원하는 섹션으로 바로 가고, 보드에 파일
   await page.getByRole("button", { name: "등록하기" }).click();
   await expect(page.getByRole("heading", { name: "드롭-결과" })).toBeVisible();
   await expect(page.getByText("1개 · 3/3")).toBeVisible();
+});
+
+test("강사가 올린 카드는 교육생 카드보다 나중에 올려도 섹션 맨 앞에 고정된다", async ({ page }) => {
+  const studentEmail = f.email("student");
+  await joinBoard(page, f, "최교육", studentEmail);
+  await seedCard(f, studentEmail, "교육생 결과물");
+
+  const tutorEmail = f.email("tutor");
+  await registerInstructor(f, tutorEmail);
+  await page.context().clearCookies();
+  await signIn(page, tutorEmail);
+  await page.goto(boardUrl(f));
+  for (const title of ["1. 교안", "2. 실습 안내"]) {
+    await page.getByRole("button", { name: "자료 올리기" }).click();
+    await page.getByPlaceholder("자료의 제목을 입력하세요").fill(title);
+    await page.getByRole("button", { name: "등록하기" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  }
+
+  await expect(page.getByRole("heading", { level: 3 })).toHaveText(["1. 교안", "2. 실습 안내", "교육생 결과물"]);
+  await expect(page.getByText("고정", { exact: true })).toHaveCount(2);
 });

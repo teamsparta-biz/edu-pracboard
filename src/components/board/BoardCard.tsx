@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Heart, Link as LinkIcon, MessageCircle, Music, Play } from "lucide-react";
+import { FileText, Heart, Link as LinkIcon, MessageCircle, Music, Pin, Play } from "lucide-react";
 import type { Card } from "@/lib/types";
 import { attachmentKind } from "@/lib/storage";
 import ItemMenu from "@/components/app/ItemMenu";
@@ -30,6 +30,12 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLik
           onDelete={onDelete && (() => onDelete(card))}
         />
       </div>
+
+      {card.pinned && (
+        <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-board shadow-sm">
+          <Pin className="w-3 h-3" /> 고정
+        </span>
+      )}
 
       <CardThumbnail card={card} />
 

@@ -76,6 +76,8 @@ export type Card = {
   authorId: string;
   author: string;
   createdAt: string;
+  // 관리자·강사가 올린 카드. 섹션 맨 앞에 고정된다 (DB가 정한다)
+  pinned: boolean;
   // 하트를 누른 사람들의 id
   likedBy: string[];
   // 오래된 순

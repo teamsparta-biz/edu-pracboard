@@ -232,11 +232,11 @@ export default function BoardView({
 
       <div className={(mode ? "mt-6 " : "") + "flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"}>
         <div>
-          <div className="text-sm text-white/60">
+          <div className="text-sm text-white/85">
             {education.company?.name} · {educationTitle(education.name)} · {roundLabel(round)}
           </div>
           <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-white">{title}</h1>
-          <p className="mt-2 text-white/60">{lesson.description}</p>
+          <p className="mt-2 text-white/85">{lesson.description}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start">
@@ -262,7 +262,7 @@ export default function BoardView({
           {sections.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md -mx-1.5 px-1.5 py-0.5 font-semibold hover:bg-white/10 transition-colors">
-                {section?.name} <ChevronDown className="w-4 h-4 text-white/60" />
+                {section?.name} <ChevronDown className="w-4 h-4 text-white/85" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-y-auto">
                 {sections.map((s, i) => (
@@ -278,11 +278,11 @@ export default function BoardView({
             <span className="font-semibold">{section?.name ?? "섹션 없음"}</span>
           )}
           {section && (
-            <span className="text-sm text-white/50">
+            <span className="text-sm text-white/80">
               · {cards.length}개 · {sectionIndex + 1}/{sections.length}
             </span>
           )}
-          {pending && <span className="text-sm text-white/50">· 저장 중...</span>}
+          {pending && <span className="text-sm text-white/80">· 저장 중...</span>}
         </div>
 
         <div className="flex items-center gap-2">
@@ -341,7 +341,7 @@ export default function BoardView({
 
         {!section ? (
           <div className="text-center py-20 border-2 border-dashed border-white/15 rounded-2xl">
-            <p className="text-white/50">아직 만들어진 섹션이 없어요.</p>
+            <p className="text-white/80">아직 만들어진 섹션이 없어요.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">

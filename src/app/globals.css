@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* 보드 배경 (와인색). 흰 글씨를 얹으므로 명도를 더 올리면 대비를 다시 확인한다 */
-  --color-board: #7d2844;
+  /* 보드 배경 (팀스파르타 레드). 흰 글씨 대비가 4.6:1이라 보조 글씨도 흰색 80% 이상으로 둔다 */
+  --color-board: #e42019;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);

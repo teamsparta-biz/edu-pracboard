@@ -205,7 +205,8 @@ export async function getBoardContents(boardId: string) {
   const [{ data: board }, { data: sections }, { data: cards }, { data: likes }, { data: comments }] = await Promise.all([
     supabase.from("boards").select(BOARD_CONTEXT_COLUMNS).eq("id", boardId).maybeSingle(),
     supabase.from("sections").select("*").eq("board_id", boardId).order("position"),
-    supabase.from("cards").select("*").eq("board_id", boardId).order("created_at"),
+    // 관리자·강사 카드(pinned)를 앞에, 각각 올린 순서대로
+    supabase.from("cards").select("*").eq("board_id", boardId).order("pinned", { ascending: false }).order("created_at"),
     supabase.from("card_likes").select("card_id, user_id").eq("board_id", boardId),
     supabase.from("card_comments").select("*").eq("board_id", boardId).order("created_at"),
   ]);
@@ -246,6 +247,7 @@ export async function getBoardContents(boardId: string) {
         authorId: c.author_id,
         author: c.author_name,
         createdAt: kstDate(c.created_at),
+        pinned: c.pinned,
         likedBy: likedBy.get(c.id) ?? [],
         comments: commentsOf.get(c.id) ?? [],
       }),

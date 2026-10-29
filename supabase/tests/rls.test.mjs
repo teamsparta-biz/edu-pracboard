@@ -161,6 +161,19 @@ await as(tutor, `insert into card_likes (card_id, board_id, user_id) values ($1,
 await as(student, `delete from cards where id = $1`, [likeCard]);
 ok("카드를 지우면 하트·댓글도 지워짐", (await db.query(`select 1 from card_likes union all select 1 from card_comments`)).rows.length === 0);
 
+// ── 고정 카드: 관리자·강사가 올린 카드만 고정되고, 아무도 바꿀 수 없다
+const pinnedOf = async (id) => (await db.query(`select pinned from cards where id = $1`, [id])).rows[0].pinned;
+const [{ id: staffCard }] = await rows(tutor, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, '강사') returning id`, [board, section, tutor.id]);
+const [{ id: adminCard }] = await rows(admin, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, '관리자') returning id`, [board, section, admin.id]);
+const [{ id: fakePin }] = await rows(student, `insert into cards (board_id, section_id, author_id, author_name, pinned) values ($1, $2, $3, '김', true) returning id`, [board, section, student.id]);
+ok("고정: 강사 카드", (await pinnedOf(staffCard)) === true);
+ok("고정: 관리자 카드", (await pinnedOf(adminCard)) === true);
+ok("고정: 교육생이 pinned=true로 넣어도 고정 안 됨", (await pinnedOf(fakePin)) === false);
+await as(student, `update cards set pinned = true where id = $1`, [fakePin]);
+await as(tutor, `update cards set pinned = false where id = $1`, [staffCard]);
+ok("고정: 수정으로 바꿀 수 없음", (await pinnedOf(fakePin)) === false && (await pinnedOf(staffCard)) === true);
+await db.query(`delete from cards where id = any($1)`, [[staffCard, adminCard, fakePin]]);
+
 // ── 외부인
 const outsider = await signup("who@naver.com");
 ok("외부인: 교육 조회 불가", (await rows(outsider, `select id from educations`)).length === 0);

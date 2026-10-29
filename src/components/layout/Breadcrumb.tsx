@@ -17,7 +17,7 @@ export default function Breadcrumb({ items, variant = "default" }: Props) {
   return (
     <nav
       aria-label="상위 경로"
-      className={"flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm " + (isLight ? "text-white/60" : "text-muted-foreground")}
+      className={"flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm " + (isLight ? "text-white/85" : "text-muted-foreground")}
     >
       {items.map((item, i) => {
         const isLast = i === items.length - 1;
