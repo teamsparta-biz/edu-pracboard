@@ -18,7 +18,7 @@ const db = new PGlite();
 
 // Supabase auth 스키마 최소 스텁
 await db.exec(`
-create role anon; create role authenticated;
+create role anon; create role authenticated; create role service_role;
 create schema auth;
 create table auth.users (
   id uuid primary key default gen_random_uuid(),
@@ -130,6 +130,37 @@ ok("교육생: 남의 카드 삭제 불가", (await rows(student, `delete from c
 ok("교육생: 본인 카드 삭제", (await rows(student, `delete from cards where id = $1 returning id`, [myCard])).length === 1);
 ok("강사: 남의 카드 삭제", (await rows(tutor, `delete from cards where id = $1 returning id`, [tutorCard])).length === 1);
 
+// ── 하트·댓글: 카드를 올릴 수 있는 사람만 남기고, 교육 담당자는 보기만 한다
+const [{ id: likeCard }] = await rows(student, `insert into cards (board_id, section_id, author_id, author_name, title) values ($1, $2, $3, '김', '하트용') returning id`, [board, section, student.id]);
+const like = (user, as_ = user) => as(as_, `insert into card_likes (card_id, board_id, user_id) values ($1, $2, $3)`, [likeCard, board, user.id]);
+await like(student);
+await like(tutor);
+ok("하트: 교육생·강사 누르기", (await rows(admin, `select 1 from card_likes where card_id = $1`, [likeCard])).length === 2);
+await expectError("하트: 교육 담당자 누르기 불가", () => like(client), "row-level security");
+await expectError("하트: 남의 이름으로 누르기 불가", () => like(admin, student), "row-level security");
+ok("하트: 교육 담당자도 수는 봄", (await rows(client, `select 1 from card_likes where card_id = $1`, [likeCard])).length === 2);
+ok("하트: 남의 하트 취소 불가", (await rows(student, `delete from card_likes where user_id = $1 returning card_id`, [tutor.id])).length === 0);
+ok("하트: 본인 하트 취소", (await rows(student, `delete from card_likes where user_id = $1 returning card_id`, [student.id])).length === 1);
+
+const student2 = await signup("lee@samsung.com");
+await as(student2, `select join_board($1)`, [board]);
+const comment = (user, text) =>
+  rows(user, `insert into card_comments (card_id, board_id, author_id, author_name, content) values ($1, $2, $3, 'x', $4) returning id`, [likeCard, board, user.id, text]);
+const [{ id: c1 }] = await comment(student, "질문 있어요");
+const [{ id: c2 }] = await comment(student2, "좋아요");
+const [{ id: c3 }] = await comment(student2, "하나 더");
+ok("댓글: 교육생 작성", !!c1 && !!c2);
+await expectError("댓글: 교육 담당자 작성 불가", () => comment(client, "x"), "row-level security");
+await expectError("댓글: 빈 댓글 불가", () => comment(student, "   "), "check constraint");
+ok("댓글: 교육 담당자도 읽기", (await rows(client, `select id from card_comments`)).length === 3);
+ok("댓글: 남의 댓글 삭제 불가", (await rows(student, `delete from card_comments where id = $1 returning id`, [c2])).length === 0);
+ok("댓글: 본인 댓글 삭제", (await rows(student, `delete from card_comments where id = $1 returning id`, [c1])).length === 1);
+ok("댓글: 강사는 교육생 댓글 삭제", (await rows(tutor, `delete from card_comments where id = $1 returning id`, [c2])).length === 1);
+ok("댓글 수정 불가 (수정 정책 없음)", (await rows(student2, `update card_comments set content = 'x' where id = $1 returning id`, [c3])).length === 0);
+await as(tutor, `insert into card_likes (card_id, board_id, user_id) values ($1, $2, $3) on conflict do nothing`, [likeCard, board, tutor.id]);
+await as(student, `delete from cards where id = $1`, [likeCard]);
+ok("카드를 지우면 하트·댓글도 지워짐", (await db.query(`select 1 from card_likes union all select 1 from card_comments`)).rows.length === 0);
+
 // ── 외부인
 const outsider = await signup("who@naver.com");
 ok("외부인: 교육 조회 불가", (await rows(outsider, `select id from educations`)).length === 0);
@@ -139,6 +170,9 @@ await expectError("외부인: 권한 테이블 직접 추가 불가", () => as(o
 // ── 데이터 정합성
 const [{ id: otherLesson }] = await rows(admin, `insert into lessons (education_id, round_id, position) values ($1, $2, 2) returning id`, [edu, round]);
 const [{ id: otherBoard }] = await rows(admin, `insert into boards (education_id, lesson_id) values ($1, $2) returning id`, [edu, otherLesson]);
+const [{ id: integrityCard }] = await rows(admin, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, 'x') returning id`, [board, section, admin.id]);
+await expectError("다른 보드 이름으로 하트 넣기 불가", () => as(admin, `insert into card_likes (card_id, board_id, user_id) values ($1, $2, $3)`, [integrityCard, otherBoard, admin.id]), "foreign key");
+await expectError("다른 보드 이름으로 댓글 넣기 불가", () => as(admin, `insert into card_comments (card_id, board_id, author_id, author_name, content) values ($1, $2, $3, 'x', 'x')`, [integrityCard, otherBoard, admin.id]), "foreign key");
 await expectError("다른 보드의 섹션에 카드 넣기 불가", () => as(admin, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, 'x')`, [otherBoard, section, admin.id]), "foreign key");
 
 console.log(`\n${pass} passed, ${fail} failed`);

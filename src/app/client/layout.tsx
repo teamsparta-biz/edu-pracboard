@@ -8,7 +8,7 @@ export default async function ClientLayout({ children }: LayoutProps<"/client">)
   if ((await homePath(user)) !== "/client") redirect("/");
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col">
-      <AppHeader user={user} roleLabel="고객사 담당자" />
+      <AppHeader user={user} roleLabel="교육 담당자" />
       {children}
     </div>
   );

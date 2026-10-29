@@ -32,7 +32,7 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
   if (user && role) {
     if (contents) {
       return (
-        <div className="min-h-screen flex flex-col bg-[#591a2e]">
+        <div className="min-h-screen flex flex-col bg-board">
           <AppHeader user={user} roleLabel={roleLabel[role]} variant="light" />
           <BoardView
             {...contents}

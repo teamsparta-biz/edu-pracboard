@@ -7,7 +7,7 @@ export type SessionUser = {
   isAdmin: boolean;
 };
 
-// board_role() 결과. viewer = 고객사 담당자(읽기 전용)
+// board_role() 결과. viewer = 교육 담당자(고객사 담당자, 읽기 전용)
 export type BoardRole = "admin" | "instructor" | "student" | "viewer";
 
 export type Company = {
@@ -75,6 +75,19 @@ export type Card = {
   link?: string;
   authorId: string;
   author: string;
+  createdAt: string;
+  // 하트를 누른 사람들의 id
+  likedBy: string[];
+  // 오래된 순
+  comments: Comment[];
+};
+
+export type Comment = {
+  id: string;
+  content: string;
+  authorId: string;
+  author: string;
+  // "10-29 14:05" (KST)
   createdAt: string;
 };
 

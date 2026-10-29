@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
-import type { Board, BoardRole, Card, Company, Division, Education, Lesson, Round, Section, Viewer } from "@/lib/types";
+import type { Board, BoardRole, Card, Comment, Company, Division, Education, Lesson, Round, Section, Viewer } from "@/lib/types";
 
 // 모든 조회는 로그인한 사용자의 세션(RLS)으로 한다. 권한 밖의 행은 DB가 걸러낸다.
 
@@ -202,12 +202,22 @@ export async function getBoardRole(boardId: string): Promise<BoardRole | null> {
 
 export async function getBoardContents(boardId: string) {
   const supabase = await createClient();
-  const [{ data: board }, { data: sections }, { data: cards }] = await Promise.all([
+  const [{ data: board }, { data: sections }, { data: cards }, { data: likes }, { data: comments }] = await Promise.all([
     supabase.from("boards").select(BOARD_CONTEXT_COLUMNS).eq("id", boardId).maybeSingle(),
     supabase.from("sections").select("*").eq("board_id", boardId).order("position"),
     supabase.from("cards").select("*").eq("board_id", boardId).order("created_at"),
+    supabase.from("card_likes").select("card_id, user_id").eq("board_id", boardId),
+    supabase.from("card_comments").select("*").eq("board_id", boardId).order("created_at"),
   ]);
   if (!board) return null;
+
+  const likedBy = new Map<string, string[]>();
+  for (const l of likes ?? []) likedBy.set(l.card_id, [...(likedBy.get(l.card_id) ?? []), l.user_id]);
+  const commentsOf = new Map<string, Comment[]>();
+  for (const c of comments ?? []) {
+    const comment: Comment = { id: c.id, content: c.content, authorId: c.author_id, author: c.author_name, createdAt: kstDateTime(c.created_at) };
+    commentsOf.set(c.card_id, [...(commentsOf.get(c.card_id) ?? []), comment]);
+  }
 
   // 첨부 파일은 비공개 버킷에 있다. 이미 RLS로 카드 열람 권한을 확인했으므로 서명 URL을 발급한다.
   const signed = await signedUrls((cards ?? []).map((c) => c.attachment_path).filter(Boolean) as string[]);
@@ -236,6 +246,8 @@ export async function getBoardContents(boardId: string) {
         authorId: c.author_id,
         author: c.author_name,
         createdAt: kstDate(c.created_at),
+        likedBy: likedBy.get(c.id) ?? [],
+        comments: commentsOf.get(c.id) ?? [],
       }),
     ),
   };
@@ -306,4 +318,9 @@ export function isUuid(value: string) {
 
 function kstDate(iso: string) {
   return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
+// "10-29 14:05"
+function kstDateTime(iso: string) {
+  return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(5, 16);
 }

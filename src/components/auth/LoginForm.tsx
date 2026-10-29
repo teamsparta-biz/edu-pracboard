@@ -22,7 +22,7 @@ export default function LoginForm({ next = "/", linkError }: { next?: string; li
         <p className="mt-2 text-center text-xs text-muted-foreground">관리자(@teamsparta.co) 전용</p>
       </div>
 
-      <Divider label="강사 · 고객사 담당자 · 교육생" />
+      <Divider label="강사 · 교육 담당자 · 교육생" />
 
       <form action={action}>
         <input type="hidden" name="next" value={next} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Link as LinkIcon, Music, Play } from "lucide-react";
+import { FileText, Heart, Link as LinkIcon, MessageCircle, Music, Play } from "lucide-react";
 import type { Card } from "@/lib/types";
 import { attachmentKind } from "@/lib/storage";
 import ItemMenu from "@/components/app/ItemMenu";
@@ -11,9 +11,12 @@ type Props = {
   onEdit?: (card: Card) => void;
   onDelete?: (card: Card) => void;
   onOpen: (card: Card) => void;
+  liked: boolean;
+  // 하트를 누를 수 없으면(교육 담당자) 넘기지 않는다. 그때는 수만 보여준다.
+  onLike?: (card: Card) => void;
 };
 
-export default function BoardCard({ card, onEdit, onDelete, onOpen }: Props) {
+export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike }: Props) {
   return (
     <div
       onClick={() => onOpen(card)}
@@ -53,12 +56,49 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen }: Props) {
             <span className="w-5 h-5 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-foreground">
               {card.author.charAt(0)}
             </span>
-            <span className="truncate">{card.author}</span>
+            {/* 하트·댓글 수가 들어가 날짜는 카드 상세에서만 보여준다. 좁은 카드에서 이름이 잘리지 않게 하기 위함 */}
+            <span className="truncate" title={`${card.author} · ${card.createdAt}`}>
+              {card.author}
+            </span>
           </span>
-          <span className="shrink-0">{card.createdAt.slice(5)}</span>
+          <span className="flex items-center gap-2.5 shrink-0 tabular-nums">
+            <LikeButton count={card.likedBy.length} liked={liked} onClick={onLike && (() => onLike(card))} />
+            <span className="flex items-center gap-1" aria-label={`댓글 ${card.comments.length}개`}>
+              <MessageCircle className="w-3.5 h-3.5" />
+              {card.comments.length}
+            </span>
+          </span>
         </div>
       </div>
     </div>
+  );
+}
+
+// 누를 수 없으면 수만 보여준다
+export function LikeButton({ count, liked, onClick, className = "" }: { count: number; liked: boolean; onClick?: () => void; className?: string }) {
+  const icon = <Heart className={"w-3.5 h-3.5 " + (liked ? "fill-rose-500 text-rose-500" : "")} />;
+  if (!onClick) {
+    return (
+      <span className={"flex items-center gap-1 " + className} aria-label={`하트 ${count}개`}>
+        {icon}
+        {count}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-pressed={liked}
+      aria-label={liked ? `하트 취소 (${count}개)` : `하트 누르기 (${count}개)`}
+      className={"flex items-center gap-1 rounded-full -mx-1 px-1 py-0.5 hover:text-rose-500 hover:bg-rose-50 transition-colors " + (liked ? "text-rose-500 " : "") + className}
+    >
+      {icon}
+      {count}
+    </button>
   );
 }
 

@@ -81,7 +81,7 @@ test("화면 캡처", async ({ browser }) => {
     await student.getByRole("button", { name: "자료 올리기" }).click();
     await student.getByPlaceholder("자료의 제목을 입력하세요").fill(title);
     if (file) await student.locator('input[type="file"]').setInputFiles(file);
-    await student.getByPlaceholder("아름다운 내용을 적어보세요...").fill(content);
+    await student.getByPlaceholder("원하는 내용을 작성해 주세요.").fill(content);
     if (link) await student.getByPlaceholder("https://").fill(link);
     if (title.startsWith("사업자")) await shoot(student, "10-card-form-long-filename");
     await student.getByRole("button", { name: "등록하기" }).click();
@@ -150,7 +150,7 @@ test("화면 캡처", async ({ browser }) => {
   await shoot(admin, "40-admin-home");
   await admin.goto(`/admin/educations/${f.educationId}`);
   await shoot(admin, "41-admin-education");
-  await admin.getByRole("button", { name: /고객사 담당자 \d+명/ }).click();
+  await admin.getByRole("button", { name: /교육 담당자 \d+명/ }).click();
   await shoot(admin, "42-viewer-roster");
   await admin.keyboard.press("Escape");
   await admin.getByRole("button", { name: "회차 만들기" }).click();

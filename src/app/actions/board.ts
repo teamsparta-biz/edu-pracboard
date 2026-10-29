@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { CARD_IMAGE_BUCKET, MAX_ATTACHMENT_BYTES } from "@/lib/storage";
 import { notifyBoards, removeFiles } from "@/lib/board-events";
 import { getSessionUser } from "@/lib/auth";
+import { COMMENT_MAX_LENGTH } from "@/lib/permissions";
 
 // 권한은 RLS가 판단한다. 여기서는 RLS가 거부하면 에러를 돌려줄 뿐이다.
 // 바뀐 뒤에는 같은 보드를 보고 있는 사람들에게 실시간 신호를 보낸다(notifyBoards).
@@ -144,6 +145,58 @@ export async function deleteCard(cardId: string): Promise<ActionResult> {
   const { data, error } = await supabase.from("cards").delete().eq("id", cardId).select("board_id, attachment_path");
   if (error || !data?.length) return { error: DENIED };
   await removeFiles(data.map((c) => c.attachment_path));
+  return changed(data[0].board_id);
+}
+
+// 하트를 누르거나 취소한다. 누를 수 있는 사람은 카드를 올릴 수 있는 사람과 같다 (RLS).
+export async function toggleLike(cardId: string): Promise<ActionResult> {
+  const user = await getSessionUser();
+  if (!user) return { error: DENIED };
+  const supabase = await createClient();
+  const { data: card } = await supabase.from("cards").select("board_id").eq("id", cardId).maybeSingle();
+  if (!card) return { error: DENIED };
+
+  const { data: removed, error } = await supabase
+    .from("card_likes")
+    .delete()
+    .eq("card_id", cardId)
+    .eq("user_id", user.id)
+    .select("card_id");
+  if (error) return { error: DENIED };
+  if (!removed?.length) {
+    const { error: insertError } = await supabase
+      .from("card_likes")
+      .insert({ card_id: cardId, board_id: card.board_id, user_id: user.id });
+    if (insertError) return { error: DENIED };
+  }
+  return changed(card.board_id);
+}
+
+export async function addComment(cardId: string, content: string): Promise<ActionResult> {
+  const text = content.trim();
+  if (!text) return { error: "댓글 내용을 입력해 주세요." };
+  if (text.length > COMMENT_MAX_LENGTH) return { error: `댓글은 ${COMMENT_MAX_LENGTH}자까지 쓸 수 있어요.` };
+  const user = await getSessionUser();
+  if (!user) return { error: DENIED };
+  const supabase = await createClient();
+  const { data: card } = await supabase.from("cards").select("board_id").eq("id", cardId).maybeSingle();
+  if (!card) return { error: DENIED };
+  const { error } = await supabase.from("card_comments").insert({
+    card_id: cardId,
+    board_id: card.board_id,
+    content: text,
+    author_id: user.id,
+    author_name: user.name,
+  });
+  if (error) return { error: DENIED };
+  return changed(card.board_id);
+}
+
+// 작성자 본인 또는 보드 관리자(관리자·강사)만 지울 수 있다 (RLS).
+export async function deleteComment(commentId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("card_comments").delete().eq("id", commentId).select("board_id");
+  if (error || !data?.length) return { error: DENIED };
   return changed(data[0].board_id);
 }
 

@@ -24,30 +24,39 @@ type Props = {
   onSubmit: (data: CardFormData) => void;
   // 있으면 수정, 없으면 새 카드
   card?: Card | null;
+  // 보드에 끌어다 놓은 파일. 새 카드 창을 이 파일이 붙은 채로 연다.
+  initialFile?: File;
 };
 
 // 첨부 미리보기: 새로 고른 파일(로컬 URL) 또는 기존 첨부(서명 URL)
 type Preview = { url: string; name: string; type: string; size?: number };
 
-export default function CardForm({ open, onClose, onSubmit, card }: Props) {
+export default function CardForm({ open, onClose, onSubmit, card, initialFile }: Props) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md sm:max-w-md">
         {/* 열 때마다 입력값을 새로 채우기 위해 key로 다시 만든다 */}
-        {open && <CardFormBody key={card?.id ?? "new"} card={card} onClose={onClose} onSubmit={onSubmit} />}
+        {open && <CardFormBody key={card?.id ?? "new"} card={card} initialFile={initialFile} onClose={onClose} onSubmit={onSubmit} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function CardFormBody({ card, onClose, onSubmit }: Omit<Props, "open">) {
-  const [title, setTitle] = useState(card?.title ?? "");
+const TOO_LARGE = `파일은 ${formatBytes(MAX_ATTACHMENT_BYTES)} 이하만 올릴 수 있어요.`;
+const localPreview = (f: File): Preview => ({ url: URL.createObjectURL(f), name: f.name, type: f.type, size: f.size });
+// 끌어다 놓은 파일로 새 카드를 만들 때 제목 칸을 파일 이름(확장자 제외)으로 채워 둔다
+const titleFromFile = (f: File) => f.name.replace(/.[^.]+$/, "");
+
+function CardFormBody({ card, initialFile, onClose, onSubmit }: Omit<Props, "open">) {
+  const dropped = initialFile && initialFile.size <= MAX_ATTACHMENT_BYTES ? initialFile : undefined;
+  const [title, setTitle] = useState(card?.title ?? (dropped ? titleFromFile(dropped) : ""));
   const [content, setContent] = useState(card?.content ?? "");
   const [link, setLink] = useState(card?.link ?? "");
-  const [file, setFile] = useState<File>();
-  const [preview, setPreview] = useState<Preview | undefined>(card?.attachment);
+  const [file, setFile] = useState<File | undefined>(dropped);
+  const [preview, setPreview] = useState<Preview | undefined>(() => (dropped ? localPreview(dropped) : card?.attachment));
   const [removed, setRemoved] = useState(false);
-  const [fileError, setFileError] = useState<string>();
+  const [fileError, setFileError] = useState<string | undefined>(initialFile && !dropped ? TOO_LARGE : undefined);
+  const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function clearAttachment() {
@@ -58,17 +67,21 @@ function CardFormBody({ card, onClose, onSubmit }: Omit<Props, "open">) {
     if (card?.attachment) setRemoved(true);
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = e.target.files?.[0];
-    e.target.value = "";
+  function pick(picked: File | undefined) {
     if (!picked) return;
     if (picked.size > MAX_ATTACHMENT_BYTES) {
-      setFileError(`파일은 ${formatBytes(MAX_ATTACHMENT_BYTES)} 이하만 올릴 수 있어요.`);
+      setFileError(TOO_LARGE);
       return;
     }
     clearAttachment();
     setFile(picked);
-    setPreview({ url: URL.createObjectURL(picked), name: picked.name, type: picked.type, size: picked.size });
+    setPreview(localPreview(picked));
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    e.target.value = "";
+    pick(picked);
   }
 
   function handleSubmit() {
@@ -114,10 +127,23 @@ function CardFormBody({ card, onClose, onSubmit }: Omit<Props, "open">) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mt-1.5 w-full h-28 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:border-foreground/30 transition-colors"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                pick(e.dataTransfer.files[0]);
+              }}
+              className={
+                "mt-1.5 w-full h-28 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:border-foreground/30 transition-colors " +
+                (dragging ? "border-foreground/40 bg-muted" : "border-border")
+              }
             >
               <Upload className="w-5 h-5" />
-              <span className="text-sm">업로드</span>
+              <span className="text-sm">파일을 끌어다 놓거나 눌러서 업로드</span>
             </button>
           )}
           <p className={"mt-1.5 text-xs " + (fileError ? "text-destructive" : "text-muted-foreground")}>
@@ -127,7 +153,7 @@ function CardFormBody({ card, onClose, onSubmit }: Omit<Props, "open">) {
 
         <div>
           <label className="text-sm font-medium">내용</label>
-          <Textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="아름다운 내용을 적어보세요..." className="mt-1.5 min-h-24" />
+          <Textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="원하는 내용을 작성해 주세요." className="mt-1.5 min-h-24" />
         </div>
 
         <div>

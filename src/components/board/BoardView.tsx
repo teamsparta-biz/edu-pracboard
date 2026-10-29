@@ -1,23 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Lock, Pencil, Plus, Settings2, Trash2, MessagesSquare, ChevronLeft, ChevronRight } from "lucide-react";
+import { useOptimistic, useState, useTransition } from "react";
+import { Check, ChevronDown, Lock, Pencil, Plus, Settings2, Trash2, MessagesSquare, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import {
   addCard,
+  addComment,
   addSection,
   createUpload,
   deleteCard,
+  deleteComment,
   deleteSection,
   renameSection,
+  toggleLike,
   updateCard,
   type AttachmentInput,
 } from "@/app/actions/board";
 import { createClient } from "@/lib/supabase/client";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
 import type { BoardContext } from "@/lib/data";
-import type { BoardRole, Card, Section } from "@/lib/types";
+import type { BoardRole, Card, Comment, Section } from "@/lib/types";
 import { educationTitle, roundLabel } from "@/lib/education";
-import { canEditCard, canManageBoard, canPost } from "@/lib/permissions";
+import { canDeleteComment, canEditCard, canManageBoard, canPost, canReact } from "@/lib/permissions";
 import ConfirmDialog from "@/components/app/ConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useBoardRealtime } from "@/components/board/useBoardRealtime";
@@ -57,6 +60,18 @@ export default function BoardView({
   const [confirm, setConfirm] = useState<{ title: string; description: string; run: () => void } | null>(null);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
+  // 보드에 끌어다 놓은 파일. 자료 올리기 창을 이 파일이 붙은 채로 연다.
+  const [droppedFile, setDroppedFile] = useState<File>();
+  // dragenter/dragleave는 자식 요소를 지날 때마다 오므로 깊이를 세어 바깥으로 나갔을 때만 끈다
+  const [dragDepth, setDragDepth] = useState(0);
+  // 하트는 누르자마자 보여주고, 서버에서 다시 읽은 값이 오면 그것으로 바뀐다
+  const [shownCards, toggleLikeLocal] = useOptimistic(allCards, (list: Card[], cardId: string) =>
+    list.map((c) =>
+      c.id !== cardId
+        ? c
+        : { ...c, likedBy: c.likedBy.includes(userId) ? c.likedBy.filter((id) => id !== userId) : [...c.likedBy, userId] },
+    ),
+  );
 
   // 다른 사람이 바꾼 내용을 새로고침 없이 반영한다
   useBoardRealtime(board.id);
@@ -67,13 +82,34 @@ export default function BoardView({
   const manage = canManageBoard(role);
   const post = canPost(role);
   const readOnly = !post;
+  const react = canReact(role);
 
   const section = sections[sectionIndex];
-  const cards = section ? allCards.filter((c) => c.sectionId === section.id) : [];
+  const cards = section ? shownCards.filter((c) => c.sectionId === section.id) : [];
   const hasPrev = sectionIndex > 0;
   const hasNext = sectionIndex < sections.length - 1;
 
   const title = `${lesson.order}차시${division ? ` · ${division.name}` : ""}`;
+
+  // 이미 창이 열려 있으면 창 안의 첨부 칸이 파일을 받는다 (창은 포털이라 이벤트가 여기까지 올라온다)
+  const acceptsDrop = post && !!section && !cardFormOpen && !editingCard;
+  const isFileDrag = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+  const dropHandlers = acceptsDrop
+    ? {
+        onDragEnter: (e: React.DragEvent) => isFileDrag(e) && setDragDepth((d) => d + 1),
+        onDragLeave: (e: React.DragEvent) => isFileDrag(e) && setDragDepth((d) => Math.max(d - 1, 0)),
+        onDragOver: (e: React.DragEvent) => isFileDrag(e) && e.preventDefault(),
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault();
+          setDragDepth(0);
+          const file = e.dataTransfer.files[0];
+          if (!file) return;
+          setDroppedFile(file);
+          setCardFormOpen(true);
+        },
+      }
+    : {};
+  const countIn = (s: Section) => allCards.filter((c) => c.sectionId === s.id).length;
 
   // 관리자·고객사 담당자·강사는 상위 계층에서 들어오므로 경로를 보여주고,
   // 교육생은 이 URL만 보므로 경로 없이 교육 정보만 보여준다.
@@ -98,6 +134,33 @@ export default function BoardView({
               setSelected(null);
               run(() => deleteCard(target.id));
             },
+          })
+      : undefined;
+
+  const likeHandler = react
+    ? (card: Card) =>
+        startTransition(async () => {
+          toggleLikeLocal(card.id);
+          const result = await toggleLike(card.id);
+          if (result.error) setError(result.error);
+        })
+    : undefined;
+
+  const addCommentHandler = react
+    ? async (card: Card, content: string) => {
+        const result = await addComment(card.id, content);
+        setError(result.error);
+        return !result.error;
+      }
+    : undefined;
+
+  const deleteCommentHandler = (comment: Comment) =>
+    canDeleteComment(role, userId, comment)
+      ? () =>
+          setConfirm({
+            title: "댓글을 삭제할까요?",
+            description: `"${comment.content.length > 30 ? comment.content.slice(0, 30) + "…" : comment.content}" 댓글이 삭제돼요.`,
+            run: () => run(() => deleteComment(comment.id)),
           })
       : undefined;
 
@@ -142,7 +205,16 @@ export default function BoardView({
   }
 
   return (
-    <div className="w-full max-w-[1800px] mx-auto px-6 lg:px-12 py-10">
+    <div className="w-full max-w-[1800px] mx-auto px-6 lg:px-12 py-10" {...dropHandlers}>
+      {acceptsDrop && dragDepth > 0 && (
+        <div className="fixed inset-0 z-40 p-6 bg-black/40 pointer-events-none">
+          <div className="h-full rounded-3xl border-2 border-dashed border-white/70 flex flex-col items-center justify-center gap-3 text-white text-center">
+            <Upload className="w-8 h-8" />
+            <p className="text-lg font-semibold">여기에 놓으면 &quot;{section?.name}&quot; 섹션에 올릴 수 있어요</p>
+            <p className="text-sm text-white/70">파일 1개, 50MB 이하</p>
+          </div>
+        </div>
+      )}
       {mode && (
         <Breadcrumb
           variant="light"
@@ -186,7 +258,25 @@ export default function BoardView({
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-white">
           <MessagesSquare className="w-5 h-5" />
-          <span className="font-semibold">{section?.name ?? "섹션 없음"}</span>
+          {/* 섹션이 여럿이면 이름을 눌러 원하는 섹션으로 바로 간다 */}
+          {sections.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md -mx-1.5 px-1.5 py-0.5 font-semibold hover:bg-white/10 transition-colors">
+                {section?.name} <ChevronDown className="w-4 h-4 text-white/60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-y-auto">
+                {sections.map((s, i) => (
+                  <DropdownMenuItem key={s.id} onClick={() => setSectionIndex(i)}>
+                    <Check className={i === sectionIndex ? "opacity-100" : "opacity-0"} />
+                    <span className="flex-1 truncate">{s.name}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{countIn(s)}개</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <span className="font-semibold">{section?.name ?? "섹션 없음"}</span>
+          )}
           {section && (
             <span className="text-sm text-white/50">
               · {cards.length}개 · {sectionIndex + 1}/{sections.length}
@@ -200,7 +290,7 @@ export default function BoardView({
             <button
               onClick={() => setCardFormOpen(true)}
               disabled={!section}
-              className="inline-flex items-center gap-2 whitespace-nowrap bg-white text-[#591a2e] px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-2 whitespace-nowrap bg-white text-board px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none"
             >
               <Plus className="w-4 h-4" /> 자료 올리기
             </button>
@@ -256,7 +346,15 @@ export default function BoardView({
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
             {cards.map((c) => (
-              <BoardCard key={c.id} card={c} onEdit={editHandler(c)} onDelete={deleteHandler(c)} onOpen={setSelected} />
+              <BoardCard
+                key={c.id}
+                card={c}
+                onEdit={editHandler(c)}
+                onDelete={deleteHandler(c)}
+                onOpen={setSelected}
+                liked={c.likedBy.includes(userId)}
+                onLike={likeHandler}
+              />
             ))}
           </div>
         )}
@@ -289,9 +387,11 @@ export default function BoardView({
         <CardForm
           open={cardFormOpen || !!editingCard}
           card={editingCard}
+          initialFile={editingCard ? undefined : droppedFile}
           onClose={() => {
             setCardFormOpen(false);
             setEditingCard(null);
+            setDroppedFile(undefined);
           }}
           onSubmit={handleCardForm}
         />
@@ -306,10 +406,14 @@ export default function BoardView({
       )}
       <CardDetail
         // 실시간 반영으로 카드가 바뀌거나 지워지면 열려 있는 상세도 따라간다
-        card={selected ? (allCards.find((c) => c.id === selected.id) ?? null) : null}
+        card={selected ? (shownCards.find((c) => c.id === selected.id) ?? null) : null}
         onClose={() => setSelected(null)}
         onEdit={selected ? editHandler(selected) : undefined}
         onDelete={selected ? deleteHandler(selected) : undefined}
+        liked={!!selected && !!shownCards.find((c) => c.id === selected.id)?.likedBy.includes(userId)}
+        onLike={likeHandler}
+        onAddComment={addCommentHandler}
+        deleteCommentHandler={deleteCommentHandler}
       />
       <ConfirmDialog
         open={!!confirm}

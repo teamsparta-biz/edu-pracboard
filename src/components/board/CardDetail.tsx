@@ -1,22 +1,32 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Download, FileText, Link as LinkIcon } from "lucide-react";
+import { Download, FileText, Link as LinkIcon, MessageCircle, X } from "lucide-react";
 import { getAttachmentDownloadUrl } from "@/app/actions/board";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import ItemMenu from "@/components/app/ItemMenu";
-import type { Card } from "@/lib/types";
+import { LikeButton } from "@/components/board/BoardCard";
+import type { Card, Comment } from "@/lib/types";
 import { attachmentKind, formatBytes } from "@/lib/storage";
+import { COMMENT_MAX_LENGTH } from "@/lib/permissions";
 
 type Props = {
   card: Card | null;
   onClose: () => void;
   onEdit?: (card: Card) => void;
   onDelete?: (card: Card) => void;
+  liked: boolean;
+  // 하트·댓글을 남길 수 없으면(교육 담당자) 넘기지 않는다
+  onLike?: (card: Card) => void;
+  // 성공하면 true. 입력칸을 비울지 정한다.
+  onAddComment?: (card: Card, content: string) => Promise<boolean>;
+  // 지울 수 있는 댓글이면 지우는 함수를 돌려준다
+  deleteCommentHandler: (comment: Comment) => (() => void) | undefined;
 };
 
-export default function CardDetail({ card, onClose, onEdit, onDelete }: Props) {
+export default function CardDetail({ card, onClose, onEdit, onDelete, liked, onLike, onAddComment, deleteCommentHandler }: Props) {
   return (
     <Dialog open={!!card} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden sm:max-w-lg">
@@ -58,11 +68,101 @@ export default function CardDetail({ card, onClose, onEdit, onDelete }: Props) {
                   {card.link}
                 </a>
               )}
+              <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground tabular-nums">
+                <LikeButton count={card.likedBy.length} liked={liked} onClick={onLike && (() => onLike(card))} />
+                <span className="flex items-center gap-1">
+                  <MessageCircle className="w-3.5 h-3.5" /> {card.comments.length}
+                </span>
+              </div>
             </div>
+
+            <Comments
+              // 카드가 바뀌면 입력 중이던 댓글을 비운다
+              key={card.id}
+              comments={card.comments}
+              onAdd={onAddComment && ((content) => onAddComment(card, content))}
+              deleteHandler={deleteCommentHandler}
+            />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Comments({
+  comments,
+  onAdd,
+  deleteHandler,
+}: {
+  comments: Comment[];
+  onAdd?: (content: string) => Promise<boolean>;
+  deleteHandler: (comment: Comment) => (() => void) | undefined;
+}) {
+  const [text, setText] = useState("");
+  const [pending, startTransition] = useTransition();
+  if (!comments.length && !onAdd) return null;
+
+  function submit() {
+    const content = text.trim();
+    if (!content || !onAdd) return;
+    startTransition(async () => {
+      if (await onAdd(content)) setText("");
+    });
+  }
+
+  return (
+    <div className="border-t border-border bg-muted/40 px-5 py-4 space-y-3 max-h-[40vh] overflow-y-auto">
+      {comments.map((c) => {
+        const remove = deleteHandler(c);
+        return (
+          <div key={c.id} className="group flex gap-2.5">
+            <span className="w-6 h-6 shrink-0 rounded-full bg-white border border-border flex items-center justify-center text-[10px] font-medium">
+              {c.author.charAt(0)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-medium">{c.author}</span>
+                <span className="text-muted-foreground tabular-nums">{c.createdAt}</span>
+                {remove && (
+                  <button
+                    type="button"
+                    onClick={remove}
+                    aria-label="댓글 삭제"
+                    className="ml-auto p-0.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive transition-opacity"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <p className="mt-0.5 text-sm whitespace-pre-wrap break-words">{c.content}</p>
+            </div>
+          </div>
+        );
+      })}
+      {onAdd && (
+        <div className="flex items-end gap-2 pt-1">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              // 한글 조합 중 Enter는 글자 확정이라 보내지 않는다
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            maxLength={COMMENT_MAX_LENGTH}
+            placeholder="댓글을 남겨 주세요. (Shift+Enter 줄바꿈)"
+            aria-label="댓글"
+            className="min-h-10 bg-white text-sm"
+          />
+          <Button size="sm" onClick={submit} disabled={pending || !text.trim()} className="shrink-0">
+            {pending ? "등록 중" : "등록"}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
