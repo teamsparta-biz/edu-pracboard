@@ -73,6 +73,8 @@ export type Card = {
   content: string;
   attachment?: Attachment;
   link?: string;
+  // 링크 페이지의 대표 이미지(og:image). 카드를 저장한 뒤 서버가 찾아 넣는다
+  linkImage?: string;
   authorId: string;
   author: string;
   createdAt: string;

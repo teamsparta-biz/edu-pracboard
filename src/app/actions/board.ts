@@ -1,11 +1,13 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CARD_IMAGE_BUCKET, MAX_ATTACHMENT_BYTES } from "@/lib/storage";
+import { CARD_IMAGE_BUCKET, MAX_ATTACHMENT_BYTES, formatBytes } from "@/lib/storage";
 import { notifyBoards, removeFiles } from "@/lib/board-events";
 import { getSessionUser } from "@/lib/auth";
+import { findLinkImage } from "@/lib/link-preview";
 import { COMMENT_MAX_LENGTH } from "@/lib/permissions";
 
 // 권한은 RLS가 판단한다. 여기서는 RLS가 거부하면 에러를 돌려줄 뿐이다.
@@ -50,7 +52,7 @@ export async function deleteSection(sectionId: string): Promise<ActionResult> {
 // 첨부 파일은 브라우저에서 Storage로 바로 올린다. 서버 액션 본문 크기 제한(1MB)을 피하기 위함.
 // 올릴 권한(can_post)을 확인한 뒤에만 업로드 URL을 발급한다.
 export async function createUpload(boardId: string, fileName: string, size: number) {
-  if (size > MAX_ATTACHMENT_BYTES) return { error: "파일은 50MB 이하만 올릴 수 있어요." };
+  if (size > MAX_ATTACHMENT_BYTES) return { error: `파일은 ${formatBytes(MAX_ATTACHMENT_BYTES)} 이하만 올릴 수 있어요.` };
   const user = await getSessionUser();
   if (!user) return { error: DENIED };
   const supabase = await createClient();
@@ -78,7 +80,8 @@ export type CardInput = {
 
 const attachmentColumns = (a: AttachmentInput | null) => ({
   attachment_path: a?.path ?? null,
-  attachment_name: a?.name ?? null,
+  // 맥에서 올린 한글 이름은 자모가 분리된 형태(NFD)라 윈도우에서 풀어져 보인다. 합친 형태(NFC)로 저장한다.
+  attachment_name: a?.name.normalize("NFC") ?? null,
   attachment_type: a?.type || (a ? "application/octet-stream" : null),
   attachment_size: a?.size ?? null,
 });
@@ -94,7 +97,7 @@ export async function addCard(boardId: string, sectionId: string, input: CardInp
   if (!user || !ownUpload(boardId, user.id, input.attachment)) return { error: DENIED };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("cards").insert({
+  const { data: created, error } = await supabase.from("cards").insert({
     board_id: boardId,
     section_id: sectionId,
     title: input.title,
@@ -103,11 +106,12 @@ export async function addCard(boardId: string, sectionId: string, input: CardInp
     ...attachmentColumns(input.attachment ?? null),
     author_id: user.id,
     author_name: user.name,
-  });
-  if (error) {
+  }).select("id").single();
+  if (error || !created) {
     await removeFiles([input.attachment?.path]);
     return { error: DENIED };
   }
+  fillLinkImage(created.id, boardId, input.link);
   return changed(boardId);
 }
 
@@ -116,15 +120,17 @@ export async function updateCard(cardId: string, input: CardInput): Promise<Acti
   const user = await getSessionUser();
   if (!user) return { error: DENIED };
   const supabase = await createClient();
-  const { data: before } = await supabase.from("cards").select("board_id, attachment_path").eq("id", cardId).maybeSingle();
+  const { data: before } = await supabase.from("cards").select("board_id, attachment_path, link").eq("id", cardId).maybeSingle();
   if (!before || !ownUpload(before.board_id, user.id, input.attachment)) return { error: DENIED };
 
+  const linkChanged = (input.link || null) !== before.link;
   const { data, error } = await supabase
     .from("cards")
     .update({
       title: input.title,
       content: input.content ?? "",
       link: input.link || null,
+      ...(linkChanged ? { link_image: null } : {}),
       ...(input.attachment !== undefined ? attachmentColumns(input.attachment) : {}),
     })
     .eq("id", cardId)
@@ -137,6 +143,7 @@ export async function updateCard(cardId: string, input: CardInput): Promise<Acti
   if (input.attachment !== undefined && before.attachment_path !== input.attachment?.path) {
     await removeFiles([before.attachment_path]);
   }
+  if (linkChanged) fillLinkImage(cardId, before.board_id, input.link);
   return changed(before.board_id);
 }
 
@@ -146,6 +153,14 @@ export async function deleteCard(cardId: string): Promise<ActionResult> {
   if (error || !data?.length) return { error: DENIED };
   await removeFiles(data.map((c) => c.attachment_path));
   return changed(data[0].board_id);
+}
+
+// 고정 카드(관리자·강사 카드)의 순서를 ids 순서로 바꾼다. 관리자·강사만 할 수 있다 (DB 함수가 확인).
+export async function reorderPinnedCards(sectionId: string, ids: string[]): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: boardId, error } = await supabase.rpc("reorder_pinned_cards", { sid: sectionId, ids });
+  if (error || !boardId) return { error: DENIED };
+  return changed(boardId as string);
 }
 
 // 하트를 누르거나 취소한다. 누를 수 있는 사람은 카드를 올릴 수 있는 사람과 같다 (RLS).
@@ -209,10 +224,29 @@ export async function getAttachmentDownloadUrl(cardId: string) {
     .eq("id", cardId)
     .maybeSingle();
   if (!card?.attachment_path) return { error: DENIED };
-  const { data } = await createAdminClient()
-    .storage.from(CARD_IMAGE_BUCKET)
-    .createSignedUrl(card.attachment_path, 60, { download: card.attachment_name ?? true });
-  return data ? { url: data.signedUrl } : { error: DENIED };
+  const { data } = await createAdminClient().storage.from(CARD_IMAGE_BUCKET).createSignedUrl(card.attachment_path, 60);
+  if (!data) return { error: DENIED };
+  // supabase-js의 download 옵션은 이름을 두 번 인코딩해서, 한글·공백·괄호가 든 이름이 "%EC%8B%A4..."로 저장된다
+  // (storage-js 2.112: URLSearchParams로 인코딩한 뒤 주소 전체를 encodeURI로 한 번 더 감싼다). 그래서 직접 한 번만 인코딩해 붙인다.
+  const name = (card.attachment_name ?? "").normalize("NFC");
+  return { url: `${data.signedUrl}&download=${encodeURIComponent(name)}` };
+}
+
+// 링크 미리보기 이미지는 응답을 보낸 뒤에 찾아 넣는다. 저장이 링크 사이트 응답을 기다리지 않게 하기 위함.
+// 그 사이 링크가 또 바뀌었으면 넣지 않는다. 카드 권한은 저장할 때 이미 RLS로 확인했다.
+function fillLinkImage(cardId: string, boardId: string, link: string | undefined) {
+  if (!link) return;
+  after(async () => {
+    const image = await findLinkImage(link);
+    if (!image) return;
+    const { data } = await createAdminClient()
+      .from("cards")
+      .update({ link_image: image })
+      .eq("id", cardId)
+      .eq("link", link)
+      .select("id");
+    if (data?.length) await notifyBoards([boardId]);
+  });
 }
 
 async function changed(boardId: string): Promise<ActionResult> {

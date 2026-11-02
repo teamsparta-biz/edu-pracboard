@@ -17,7 +17,7 @@ test("교육생이 올린 카드가 강사 화면에 새로고침 없이 나타�
   await registerInstructor(f, tutorEmail);
   await signIn(tutor, tutorEmail);
   await tutor.goto(boardUrl(f));
-  await expect(tutor.getByText("· 0개")).toBeVisible();
+  await expect(tutor.getByRole("tab", { name: /수강생 게시판/ })).toHaveText("수강생 게시판0");
   // 실시간 채널이 붙을 시간을 준다
   await tutor.waitForTimeout(1500);
 

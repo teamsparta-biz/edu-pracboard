@@ -1,7 +1,7 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
-import { Check, ChevronDown, Lock, Pencil, Plus, Settings2, Trash2, MessagesSquare, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { Lock, Pencil, Plus, Settings2, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import {
   addCard,
   addComment,
@@ -11,12 +11,13 @@ import {
   deleteComment,
   deleteSection,
   renameSection,
+  reorderPinnedCards,
   toggleLike,
   updateCard,
   type AttachmentInput,
 } from "@/app/actions/board";
 import { createClient } from "@/lib/supabase/client";
-import { CARD_IMAGE_BUCKET } from "@/lib/storage";
+import { CARD_IMAGE_BUCKET, MAX_ATTACHMENT_BYTES, formatBytes } from "@/lib/storage";
 import type { BoardContext } from "@/lib/data";
 import type { BoardRole, Card, Comment, Section } from "@/lib/types";
 import { educationTitle, roundLabel } from "@/lib/education";
@@ -64,20 +65,30 @@ export default function BoardView({
   const [droppedFile, setDroppedFile] = useState<File>();
   // dragenter/dragleave는 자식 요소를 지날 때마다 오므로 깊이를 세어 바깥으로 나갔을 때만 끈다
   const [dragDepth, setDragDepth] = useState(0);
-  // 하트는 누르자마자 보여주고, 서버에서 다시 읽은 값이 오면 그것으로 바뀐다
-  const [shownCards, toggleLikeLocal] = useOptimistic(allCards, (list: Card[], cardId: string) =>
-    list.map((c) =>
-      c.id !== cardId
-        ? c
-        : { ...c, likedBy: c.likedBy.includes(userId) ? c.likedBy.filter((id) => id !== userId) : [...c.likedBy, userId] },
-    ),
+  // 하트와 고정 카드 순서는 바로 보여주고, 서버에서 다시 읽은 값이 오면 그것으로 바뀐다
+  const [shownCards, applyLocal] = useOptimistic(allCards, (list: Card[], change: LocalChange) =>
+    change.type === "pinOrder"
+      ? withPinOrder(list, change.ids)
+      : list.map((c) =>
+          c.id !== change.cardId
+            ? c
+            : { ...c, likedBy: c.likedBy.includes(userId) ? c.likedBy.filter((id) => id !== userId) : [...c.likedBy, userId] },
+        ),
   );
+  // 끌고 있는 고정 카드와, 끄는 동안 미리 보여주는 고정 카드 순서
+  const [pinDrag, setPinDrag] = useState<{ id: string; ids: string[] } | null>(null);
 
   // 다른 사람이 바꾼 내용을 새로고침 없이 반영한다
   useBoardRealtime(board.id);
 
   // 섹션이 삭제돼 범위를 벗어나면 마지막 섹션으로 맞춘다.
   const sectionIndex = Math.min(rawSectionIndex, Math.max(sections.length - 1, 0));
+  const navAnchorRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // 화살표나 키보드로 섹션이 바뀌면 탭 줄에서 그 탭이 보이게 한다 (섹션이 많아 가로로 넘칠 때)
+  useEffect(() => {
+    tabRefs.current[sectionIndex]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [sectionIndex]);
 
   const manage = canManageBoard(role);
   const post = canPost(role);
@@ -85,7 +96,8 @@ export default function BoardView({
   const react = canReact(role);
 
   const section = sections[sectionIndex];
-  const cards = section ? shownCards.filter((c) => c.sectionId === section.id) : [];
+  const sectionCards = section ? shownCards.filter((c) => c.sectionId === section.id) : [];
+  const cards = pinDrag ? withPinOrder(sectionCards, pinDrag.ids) : sectionCards;
   const hasPrev = sectionIndex > 0;
   const hasNext = sectionIndex < sections.length - 1;
 
@@ -140,7 +152,7 @@ export default function BoardView({
   const likeHandler = react
     ? (card: Card) =>
         startTransition(async () => {
-          toggleLikeLocal(card.id);
+          applyLocal({ type: "like", cardId: card.id });
           const result = await toggleLike(card.id);
           if (result.error) setError(result.error);
         })
@@ -163,6 +175,77 @@ export default function BoardView({
             run: () => run(() => deleteComment(comment.id)),
           })
       : undefined;
+
+  // 고정 카드끼리 끌어다 놓아 순서를 바꾼다 (관리자·강사). 끄는 동안 자리를 미리 바꿔 보여주고, 놓으면 저장한다.
+  // 모바일 터치는 브라우저가 끌어 놓기를 지원하지 않아 순서를 바꿀 수 없다.
+  const pinDragProps = (card: Card) => {
+    if (!manage || !card.pinned || !section) return undefined;
+    const sectionId = section.id;
+    return {
+      dragging: pinDrag?.id === card.id,
+      onDragStart: (e: React.DragEvent) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", card.id);
+        setPinDrag({ id: card.id, ids: cards.filter((c) => c.pinned).map((c) => c.id) });
+      },
+      onDragOver: (e: React.DragEvent) => {
+        if (!pinDrag) return;
+        e.preventDefault();
+        const from = pinDrag.ids.indexOf(pinDrag.id);
+        const to = pinDrag.ids.indexOf(card.id);
+        if (from === to) return;
+        const ids = [...pinDrag.ids];
+        ids.splice(from, 1);
+        ids.splice(to, 0, pinDrag.id);
+        setPinDrag({ ...pinDrag, ids });
+      },
+      onDragEnd: (e: React.DragEvent) => {
+        const dragged = pinDrag;
+        setPinDrag(null);
+        // 카드 영역 밖에 놓거나 Esc로 취소하면 원래대로 둔다
+        if (!dragged || e.dataTransfer.dropEffect === "none") return;
+        const before = sectionCards.filter((c) => c.pinned).map((c) => c.id);
+        if (before.join() === dragged.ids.join()) return;
+        startTransition(async () => {
+          applyLocal({ type: "pinOrder", ids: dragged.ids });
+          const result = await reorderPinnedCards(sectionId, dragged.ids);
+          setError(result.error);
+        });
+      },
+    };
+  };
+  // 카드 사이 빈틈에 놓아도 놓은 것으로 친다
+  const pinDropZone = pinDrag
+    ? {
+        onDragOver: (e: React.DragEvent) => e.preventDefault(),
+        onDrop: (e: React.DragEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+      }
+    : {};
+
+  // 섹션을 바꿀 때, 아래로 스크롤해 탭이 화면 위에 붙어 있던 상태면 새 섹션의 처음부터 보이도록 탭 위치로 올린다
+  function goToSection(i: number) {
+    setSectionIndex(i);
+    const top = navAnchorRef.current ? navAnchorRef.current.getBoundingClientRect().top + window.scrollY : 0;
+    if (window.scrollY > top) window.scrollTo({ top });
+  }
+
+  // 화살표 키로 탭 사이를 오간다 (탭 목록 표준 동작)
+  function handleTabKey(e: React.KeyboardEvent) {
+    const last = sections.length - 1;
+    const next =
+      e.key === "ArrowRight" ? Math.min(sectionIndex + 1, last)
+      : e.key === "ArrowLeft" ? Math.max(sectionIndex - 1, 0)
+      : e.key === "Home" ? 0
+      : e.key === "End" ? last
+      : null;
+    if (next === null) return;
+    e.preventDefault();
+    goToSection(next);
+    tabRefs.current[next]?.focus();
+  }
 
   function handleSectionForm(name: string) {
     if (sectionForm === "rename" && section) run(() => renameSection(section.id, name));
@@ -211,7 +294,7 @@ export default function BoardView({
           <div className="h-full rounded-3xl border-2 border-dashed border-white/70 flex flex-col items-center justify-center gap-3 text-white text-center">
             <Upload className="w-8 h-8" />
             <p className="text-lg font-semibold">여기에 놓으면 &quot;{section?.name}&quot; 섹션에 올릴 수 있어요</p>
-            <p className="text-sm text-white/70">파일 1개, 50MB 이하</p>
+            <p className="text-sm text-white/70">파일 1개, {formatBytes(MAX_ATTACHMENT_BYTES)} 이하</p>
           </div>
         </div>
       )}
@@ -254,37 +337,60 @@ export default function BoardView({
         </div>
       </div>
 
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-foreground">
-          <MessagesSquare className="w-5 h-5" />
-          {/* 섹션이 여럿이면 이름을 눌러 원하는 섹션으로 바로 간다 */}
-          {sections.length > 1 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-md -mx-1.5 px-1.5 py-0.5 font-semibold hover:bg-black/5 transition-colors">
-                {section?.name} <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-y-auto">
-                {sections.map((s, i) => (
-                  <DropdownMenuItem key={s.id} onClick={() => setSectionIndex(i)}>
-                    <Check className={i === sectionIndex ? "opacity-100" : "opacity-0"} />
-                    <span className="flex-1 truncate">{s.name}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">{countIn(s)}개</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <span className="font-semibold">{section?.name ?? "섹션 없음"}</span>
+      {/* 섹션 탭: 모든 섹션을 한 줄로 보여주고 한 번에 이동한다. 스크롤해도 화면 위에 붙어 있다. */}
+      <div ref={navAnchorRef} className="mt-8" />
+      <div className="sticky top-0 z-30 -mx-6 lg:-mx-12 px-6 lg:px-12 py-3 bg-board-bg/95 backdrop-blur border-b border-border/60 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="섹션"
+          onKeyDown={handleTabKey}
+          className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {sections.length === 0 && <span className="text-sm text-muted-foreground px-1">섹션 없음</span>}
+          {sections.map((s, i) => {
+            const active = i === sectionIndex;
+            return (
+              <button
+                key={s.id}
+                ref={(el) => {
+                  tabRefs.current[i] = el;
+                }}
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
+                onClick={() => goToSection(i)}
+                className={
+                  "shrink-0 inline-flex items-center gap-1.5 rounded-full pl-3.5 pr-2 py-1.5 text-sm font-medium whitespace-nowrap border transition-colors " +
+                  (active
+                    ? "bg-board border-board text-white"
+                    : "bg-white border-border text-foreground hover:bg-muted")
+                }
+              >
+                {s.name}
+                <span
+                  className={
+                    "min-w-5 rounded-full px-1.5 text-xs tabular-nums " +
+                    (active ? "bg-white/25 text-white" : "bg-muted text-muted-foreground")
+                  }
+                >
+                  {countIn(s)}
+                </span>
+              </button>
+            );
+          })}
+          {manage && (
+            <button
+              onClick={() => setSectionForm("add")}
+              aria-label="섹션 추가"
+              className="shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-muted-foreground border border-dashed border-border hover:bg-white hover:text-foreground transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> 섹션
+            </button>
           )}
-          {section && (
-            <span className="text-sm text-muted-foreground">
-              · {cards.length}개 · {sectionIndex + 1}/{sections.length}
-            </span>
-          )}
-          {pending && <span className="text-sm text-muted-foreground">· 저장 중...</span>}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
+          {pending && <span className="text-sm text-muted-foreground">저장 중...</span>}
           {post && (
             <button
               onClick={() => setCardFormOpen(true)}
@@ -319,23 +425,28 @@ export default function BoardView({
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
       <div className="relative mt-6 px-0 sm:px-20 min-h-[340px]">
+        {/* 화살표는 카드 영역 높이만큼의 세로 레일 안에서 화면 가운데에 붙어 있어, 스크롤해도 따라온다 */}
         {hasPrev && (
-          <button
-            onClick={() => setSectionIndex(sectionIndex - 1)}
-            aria-label="이전 섹션"
-            className="hidden sm:flex absolute left-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+          <div className="hidden sm:block absolute left-0 inset-y-0 pt-[152px]">
+            <button
+              onClick={() => goToSection(sectionIndex - 1)}
+              aria-label="이전 섹션"
+              className="sticky top-[calc(50vh-18px)] flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
         )}
         {hasNext && (
-          <button
-            onClick={() => setSectionIndex(sectionIndex + 1)}
-            aria-label="다음 섹션"
-            className="hidden sm:flex absolute right-0 top-[170px] -translate-y-1/2 items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="hidden sm:block absolute right-0 inset-y-0 pt-[152px]">
+            <button
+              onClick={() => goToSection(sectionIndex + 1)}
+              aria-label="다음 섹션"
+              className="sticky top-[calc(50vh-18px)] flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm hover:bg-muted transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         )}
 
         {!section ? (
@@ -343,7 +454,7 @@ export default function BoardView({
             <p className="text-muted-foreground">아직 만들어진 섹션이 없어요.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5" {...pinDropZone}>
             {cards.map((c) => (
               <BoardCard
                 key={c.id}
@@ -353,6 +464,7 @@ export default function BoardView({
                 onOpen={setSelected}
                 liked={c.likedBy.includes(userId)}
                 onLike={likeHandler}
+                drag={pinDragProps(c)}
               />
             ))}
           </div>
@@ -362,7 +474,7 @@ export default function BoardView({
           <div className="mt-4 flex sm:hidden items-center justify-center gap-3">
             {hasPrev && (
               <button
-                onClick={() => setSectionIndex(sectionIndex - 1)}
+                onClick={() => goToSection(sectionIndex - 1)}
                 aria-label="이전 섹션"
                 className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm"
               >
@@ -371,7 +483,7 @@ export default function BoardView({
             )}
             {hasNext && (
               <button
-                onClick={() => setSectionIndex(sectionIndex + 1)}
+                onClick={() => goToSection(sectionIndex + 1)}
                 aria-label="다음 섹션"
                 className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-border text-foreground shadow-sm"
               >
@@ -423,4 +535,14 @@ export default function BoardView({
       />
     </div>
   );
+}
+
+type LocalChange = { type: "like"; cardId: string } | { type: "pinOrder"; ids: string[] };
+
+// 고정 카드 자리는 그대로 두고, 그 자리에 들어갈 카드만 ids 순서로 바꾼다
+function withPinOrder(list: Card[], ids: string[]) {
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  const ordered = list.filter((c) => rank.has(c.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+  let next = 0;
+  return list.map((c) => (rank.has(c.id) ? ordered[next++] : c));
 }

@@ -172,6 +172,21 @@ ok("고정: 교육생이 pinned=true로 넣어도 고정 안 됨", (await pinned
 await as(student, `update cards set pinned = true where id = $1`, [fakePin]);
 await as(tutor, `update cards set pinned = false where id = $1`, [staffCard]);
 ok("고정: 수정으로 바꿀 수 없음", (await pinnedOf(fakePin)) === false && (await pinnedOf(staffCard)) === true);
+
+// ── 고정 카드 순서: 새 고정 카드는 맨 뒤, 관리자·강사만 순서를 바꾼다
+const pinOrder = async () =>
+  (await db.query(`select id from cards where section_id = $1 and pinned order by pin_position`, [section])).rows.map((r) => r.id).join();
+const posOf = async (id) => (await db.query(`select pin_position from cards where id = $1`, [id])).rows[0].pin_position;
+ok("순서: 새 고정 카드는 맨 뒤", (await pinOrder()) === [staffCard, adminCard].join());
+ok("순서: 교육생 카드는 순서 값 없음", (await posOf(fakePin)) === null);
+await as(tutor, `select reorder_pinned_cards($1, $2)`, [section, [adminCard, staffCard]]);
+ok("순서: 강사가 바꿈", (await pinOrder()) === [adminCard, staffCard].join());
+await as(admin, `select reorder_pinned_cards($1, $2)`, [section, [staffCard, adminCard]]);
+ok("순서: 관리자가 바꿈", (await pinOrder()) === [staffCard, adminCard].join());
+await expectError("순서: 교육생은 바꿀 수 없음", () => as(student, `select reorder_pinned_cards($1, $2)`, [section, [adminCard, staffCard]]), "not allowed");
+await expectError("순서: 고객사 담당자는 바꿀 수 없음", () => as(client, `select reorder_pinned_cards($1, $2)`, [section, [adminCard, staffCard]]), "not allowed");
+await as(student, `update cards set pin_position = -1 where id = $1`, [fakePin]);
+ok("순서: 교육생이 자기 카드에 순서 값을 넣어도 무시", (await posOf(fakePin)) === null);
 await db.query(`delete from cards where id = any($1)`, [[staffCard, adminCard, fakePin]]);
 
 // ── 외부인

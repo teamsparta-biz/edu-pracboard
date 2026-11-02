@@ -1,9 +1,11 @@
 "use client";
 
-import { FileText, Heart, Link as LinkIcon, MessageCircle, Music, Pin, Play } from "lucide-react";
+import { useState } from "react";
+import { Code2, FileText, GripVertical, Heart, Link as LinkIcon, MessageCircle, Music, Pin, Play } from "lucide-react";
 import type { Card } from "@/lib/types";
 import { attachmentKind } from "@/lib/storage";
 import ItemMenu from "@/components/app/ItemMenu";
+import HtmlPreview from "@/components/board/HtmlPreview";
 
 type Props = {
   card: Card;
@@ -14,13 +16,22 @@ type Props = {
   liked: boolean;
   // 하트를 누를 수 없으면(교육 담당자) 넘기지 않는다. 그때는 수만 보여준다.
   onLike?: (card: Card) => void;
+  // 고정 카드 순서를 바꿀 수 있으면(관리자·강사) 끌기 이벤트를 넘긴다
+  drag?: React.HTMLAttributes<HTMLDivElement> & { dragging: boolean };
 };
 
-export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike }: Props) {
+export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike, drag }: Props) {
+  const { dragging, ...dragHandlers } = drag ?? { dragging: false };
   return (
     <div
       onClick={() => onOpen(card)}
-      className="group relative bg-white rounded-2xl border border-border overflow-hidden hover:shadow-md transition-shadow cursor-pointer flex flex-col"
+      draggable={!!drag}
+      {...dragHandlers}
+      className={
+        "group relative bg-white rounded-2xl border border-border overflow-hidden hover:shadow-md transition-[box-shadow,opacity] cursor-pointer flex flex-col" +
+        (drag ? " active:cursor-grabbing" : "") +
+        (dragging ? " opacity-40 ring-2 ring-board" : "")
+      }
     >
       <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 transition-opacity">
         <ItemMenu
@@ -33,7 +44,7 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLik
 
       {card.pinned && (
         <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-board shadow-sm">
-          <Pin className="w-3 h-3" /> 고정
+          {drag ? <GripVertical className="w-3 h-3 -ml-0.5" /> : <Pin className="w-3 h-3" />} 고정
         </span>
       )}
 
@@ -108,16 +119,11 @@ export function LikeButton({ count, liked, onClick, className = "" }: { count: n
   );
 }
 
+const box = "relative h-44 bg-muted flex items-center justify-center overflow-hidden";
+
 function CardThumbnail({ card }: { card: Card }) {
   const a = card.attachment;
-  const box = "relative h-44 bg-muted flex items-center justify-center overflow-hidden";
-  if (!a) {
-    return (
-      <div className={box}>
-        <LinkIcon className="w-8 h-8 text-muted-foreground/40" />
-      </div>
-    );
-  }
+  if (!a) return <LinkThumbnail card={card} />;
 
   const kind = attachmentKind(a.type);
   if (kind === "image") {
@@ -125,7 +131,7 @@ function CardThumbnail({ card }: { card: Card }) {
       <div className={box}>
         {/* 비공개 파일의 서명 URL이라 이미지 최적화(공용 캐시)를 거치지 않는다 */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={a.url} alt={card.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        <img src={a.url} alt={card.title} draggable={false} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
       </div>
     );
   }
@@ -139,11 +145,56 @@ function CardThumbnail({ card }: { card: Card }) {
       </div>
     );
   }
-  const Icon = kind === "audio" ? Music : FileText;
-  return (
+  const Icon = kind === "audio" ? Music : kind === "html" ? Code2 : FileText;
+  const fileBox = (
     <div className={box + " flex-col gap-2 px-4"}>
       <Icon className="w-8 h-8 text-muted-foreground/60" />
       <span className="text-xs text-muted-foreground truncate max-w-full">{a.name}</span>
     </div>
   );
+  if (kind === "html") {
+    return (
+      <div className={box + " bg-white border-b border-border"}>
+        <HtmlPreview url={a.url} size={a.size} title={card.title} variant="thumbnail" fallback={fileBox} />
+      </div>
+    );
+  }
+  return fileBox;
+}
+
+// 첨부 없이 링크만 있는 카드: 링크 페이지의 대표 이미지, 없으면 사이트 주소를 보여준다
+function LinkThumbnail({ card }: { card: Card }) {
+  const [broken, setBroken] = useState<string>();
+  const host = card.link ? hostOf(card.link) : undefined;
+  if (card.linkImage && broken !== card.linkImage) {
+    return (
+      <div className={box}>
+        {/* 다른 사이트의 이미지라 이미지 최적화(허용 도메인 목록)를 거치지 않는다 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={card.linkImage}
+          alt={card.title}
+          draggable={false}
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(card.linkImage)}
+          className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className={box + " flex-col gap-2 px-4"}>
+      <LinkIcon className="w-8 h-8 text-muted-foreground/40" />
+      {host && <span className="text-xs text-muted-foreground truncate max-w-full">{host}</span>}
+    </div>
+  );
+}
+
+function hostOf(link: string) {
+  try {
+    return new URL(link).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
 }

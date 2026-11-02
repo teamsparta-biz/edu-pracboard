@@ -3,16 +3,20 @@
 export const CARD_IMAGE_BUCKET = "card-images";
 
 // Supabase 프로젝트의 업로드 한도와 같다. 버킷에도 같은 값이 설정돼 있다.
-export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 200 * 1024 * 1024;
 
-export type AttachmentKind = "image" | "video" | "audio" | "file";
+export type AttachmentKind = "image" | "video" | "audio" | "html" | "file";
 
 export function attachmentKind(type: string): AttachmentKind {
   if (type.startsWith("image/")) return "image";
+  if (type === "text/html") return "html";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
   return "file";
 }
+
+// HTML 미리보기는 파일 내용을 받아 격리된 창에 그린다. 너무 큰 파일은 미리보기 없이 파일로만 보여준다.
+export const MAX_HTML_PREVIEW_BYTES = 5 * 1024 * 1024;
 
 export function formatBytes(bytes?: number) {
   if (!bytes) return "";

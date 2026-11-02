@@ -34,7 +34,7 @@ export default async function globalSetup(config: FullConfig) {
 
   const { data: bucket } = await db.storage.getBucket("card-images");
   if (!bucket) {
-    const { error } = await db.storage.createBucket("card-images", { public: false, fileSizeLimit: "50MB" });
+    const { error } = await db.storage.createBucket("card-images", { public: false, fileSizeLimit: "200MB" });
     if (error) throw new Error(`첨부 파일 버킷을 만들지 못했어요: ${error.message}`);
     console.log("[e2e] card-images 버킷 생성");
   }

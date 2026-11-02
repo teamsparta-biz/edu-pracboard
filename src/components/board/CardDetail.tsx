@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import ItemMenu from "@/components/app/ItemMenu";
 import { LikeButton } from "@/components/board/BoardCard";
+import HtmlPreview from "@/components/board/HtmlPreview";
 import type { Card, Comment } from "@/lib/types";
 import { attachmentKind, formatBytes } from "@/lib/storage";
 import { COMMENT_MAX_LENGTH } from "@/lib/permissions";
@@ -29,7 +30,13 @@ type Props = {
 export default function CardDetail({ card, onClose, onEdit, onDelete, liked, onLike, onAddComment, deleteCommentHandler }: Props) {
   return (
     <Dialog open={!!card} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden sm:max-w-lg">
+      {/* HTML 결과물은 넓은 창에서 봐야 해서 창을 키운다 */}
+      <DialogContent
+        className={
+          "max-w-lg p-0 gap-0 overflow-hidden " +
+          (card?.attachment && attachmentKind(card.attachment.type) === "html" ? "sm:max-w-5xl" : "sm:max-w-lg")
+        }
+      >
         {card && (
           <>
             <div className="flex items-center justify-between pl-5 pr-12 py-4">
@@ -168,7 +175,16 @@ function Comments({
 
 function AttachmentView({ card }: { card: Card }) {
   const a = card.attachment;
-  if (!a) return null;
+  if (!a) {
+    // 링크만 있는 카드는 링크 페이지의 대표 이미지를 보여주고, 누르면 그 페이지로 간다
+    if (!card.linkImage || !card.link) return null;
+    return (
+      <a href={card.link} target="_blank" rel="noopener noreferrer" className="block bg-muted">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={card.linkImage} alt={card.title} referrerPolicy="no-referrer" className="w-full max-h-[40vh] object-cover" />
+      </a>
+    );
+  }
   const kind = attachmentKind(a.type);
 
   return (
@@ -179,6 +195,7 @@ function AttachmentView({ card }: { card: Card }) {
       )}
       {kind === "video" && <video src={a.url} controls playsInline className="w-full max-h-[60vh] bg-black" />}
       {kind === "audio" && <audio src={a.url} controls className="w-full p-4" />}
+      {kind === "html" && <HtmlPreview url={a.url} size={a.size} title={card.title} variant="detail" fallback={null} />}
       <div className="flex items-center gap-3 px-5 py-3 border-t border-border bg-white">
         <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
         <span className="flex-1 min-w-0 text-sm truncate">{a.name}</span>
