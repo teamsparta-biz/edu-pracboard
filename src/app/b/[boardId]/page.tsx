@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getBoardContents, getBoardPreview, getBoardRole, isUuid, listInstructors, type BoardContext } from "@/lib/data";
 import { educationTitle, roundLabel } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
+import ExportButton from "@/components/app/ExportButton";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
 import BoardView from "@/components/board/BoardView";
@@ -42,7 +43,10 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
             role={role}
             userId={user.id}
             headerActions={
-              role === "admin" && (
+              <>
+                {/* 게시물 내려받기는 관리자와 교육 담당자만 */}
+                {(role === "admin" || role === "viewer") && <ExportButton scope={{ type: "board", id: boardId }} />}
+                {role === "admin" && (
                 <EmailRoster
                   key="instructors"
                   variant="board"
@@ -53,7 +57,8 @@ export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
                   onAdd={addInstructor.bind(null, boardId)}
                   onRemove={removeInstructor.bind(null, boardId)}
                 />
-              )
+                )}
+              </>
             }
           />
         </div>

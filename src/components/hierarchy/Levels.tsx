@@ -21,6 +21,8 @@ import LessonForm from "@/components/board/LessonForm";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/app/ConfirmDialog";
 import ItemMenu from "@/components/app/ItemMenu";
+import ExportButton from "@/components/app/ExportButton";
+import type { ExportScope } from "@/lib/board-export";
 import {
   CompanyChip,
   CopyUrlButton,
@@ -140,6 +142,11 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
+// 게시물 내려받기 (관리자·교육 담당자). 강사 화면에는 두지 않는다.
+function exportAction(mode: Mode, scope: ExportScope) {
+  return mode === "instructor" ? null : <ExportButton scope={scope} label="전체 내려받기" />;
+}
+
 // 관리자의 생성·수정·삭제 요청. 실패하면 헤더 아래에 문구를 띄운다.
 function useCreate() {
   const [error, setError] = useState<string>();
@@ -207,7 +214,12 @@ export function RoundList({
         onCreate={education.synced ? undefined : () => setFormOpen(true)}
         createLabel="회차 만들기"
         error={error}
-        actions={actions}
+        actions={
+          <>
+            {exportAction(mode, { type: "education", id: education.id })}
+            {actions}
+          </>
+        }
       />
       <EducationBoards mode={mode} educationId={education.id} boards={educationBoards} run={run} setConfirm={setConfirm} />
       {/* 기간형 차시만 있는 axhub 교육처럼 회차가 없고 교육 보드만 있으면 회차 칸은 감춘다 */}
@@ -429,6 +441,7 @@ export function LessonList({
         onCreate={round.synced ? undefined : () => setFormOpen(true)}
         createLabel="차시 만들기"
         error={error}
+        actions={exportAction(mode, { type: "round", id: round.id })}
       />
       <SearchBox value={query} onChange={setQuery} placeholder="차시 검색 (설명)" />
       {filtered.length === 0 ? (
@@ -519,7 +532,13 @@ export function DivisionList({
           { label: `${lesson.order}차시` },
         ]}
       />
-      <Header mode={mode} title={`${lesson.order}차시`} description={lesson.description} company={education.company} />
+      <Header
+        mode={mode}
+        title={`${lesson.order}차시`}
+        description={lesson.description}
+        company={education.company}
+        actions={exportAction(mode, { type: "lesson", id: lesson.id })}
+      />
       <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Badge variant="secondary">분반 {divisions.length}</Badge> 분반마다 별도 보드(URL)가 있어요.
       </div>
