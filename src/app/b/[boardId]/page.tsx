@@ -11,10 +11,13 @@ import BoardView from "@/components/board/BoardView";
 import EmailRoster from "@/components/hierarchy/EmailRoster";
 import JoinBoard from "@/components/board/JoinBoard";
 
-const boardTitle = ({ round, lesson, division, education }: BoardContext) => ({
-  subtitle: `${educationTitle(education.name)} · ${roundLabel(round)}`,
-  title: `${lesson.order}차시${division ? ` · ${division.name}` : ""} 보드`,
-});
+const boardTitle = ({ round, lesson, division, education, educationBoard }: BoardContext) =>
+  round && lesson
+    ? {
+        subtitle: `${educationTitle(education.name)} · ${roundLabel(round)}`,
+        title: `${lesson.order}차시${division ? ` · ${division.name}` : ""} 보드`,
+      }
+    : { subtitle: educationTitle(education.name), title: educationBoard?.name ?? "보드" };
 
 // 최소 단위 교육의 고유 URL. 강사·교육생은 이 화면만 본다.
 export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {

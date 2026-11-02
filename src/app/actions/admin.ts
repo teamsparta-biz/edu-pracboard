@@ -142,6 +142,75 @@ async function deleteWithBoards(table: "rounds" | "lessons", id: string): Promis
   return {};
 }
 
+// 교육 보드: 회차·차시 없이 교육에 바로 붙는 보드. axhub 교육에도 만들 수 있고 동기화가 건드리지 않는다.
+// 기간형 보드(axhub_window_course_id)는 동기화가 관리하므로 고치거나 지울 수 없다.
+const WINDOW_BOARD = "axhub 기간형 차시로 만든 보드는 axhub에서 관리해요. 1시간마다 자동으로 반영돼요.";
+
+async function manualEducationBoard(boardId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("boards")
+    .select("id, lesson_id, axhub_window_course_id")
+    .eq("id", boardId)
+    .maybeSingle();
+  if (!data || data.lesson_id) return { error: DENIED };
+  if (data.axhub_window_course_id) return { error: WINDOW_BOARD };
+  return {};
+}
+
+export async function createEducationBoard(
+  educationId: string,
+  input: { name: string; description?: string },
+): Promise<ActionResult> {
+  await requireAdmin();
+  const name = input.name.trim();
+  if (!name) return { error: "보드 이름을 입력해 주세요." };
+  const supabase = await createClient();
+  const { data: board, error } = await supabase
+    .from("boards")
+    .insert({ education_id: educationId, name, description: input.description?.trim() ?? "" })
+    .select("id")
+    .single();
+  if (error || !board) return { error: DENIED };
+  await supabase.from("sections").insert({ board_id: board.id, position: 1, name: "수강생 게시판" });
+  refresh();
+  return {};
+}
+
+export async function updateEducationBoard(
+  boardId: string,
+  input: { name: string; description?: string },
+): Promise<ActionResult> {
+  await requireAdmin();
+  const name = input.name.trim();
+  if (!name) return { error: "보드 이름을 입력해 주세요." };
+  const blocked = await manualEducationBoard(boardId);
+  if (blocked.error) return blocked;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("boards")
+    .update({ name, description: input.description?.trim() ?? "" })
+    .eq("id", boardId);
+  if (error) return { error: DENIED };
+  await notifyBoards([boardId]);
+  refresh();
+  return {};
+}
+
+export async function deleteEducationBoard(boardId: string): Promise<ActionResult> {
+  await requireAdmin();
+  const blocked = await manualEducationBoard(boardId);
+  if (blocked.error) return blocked;
+  const supabase = await createClient();
+  const { data: files } = await supabase.from("cards").select("attachment_path").eq("board_id", boardId);
+  const { data, error } = await supabase.from("boards").delete().eq("id", boardId).select("id");
+  if (error || !data?.length) return { error: DENIED };
+  await removeFiles((files ?? []).map((c) => c.attachment_path));
+  await notifyBoards([boardId]);
+  refresh();
+  return {};
+}
+
 // 이메일만으로 로그인하므로 등록만 하면 된다. 초대 링크·비밀번호 없음 (PLAN.md 2.1절).
 function parseEmail(raw: string) {
   const email = raw.trim().toLowerCase();

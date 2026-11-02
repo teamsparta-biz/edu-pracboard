@@ -47,6 +47,7 @@ export default function BoardView({
   round,
   education,
   division,
+  educationBoard,
   sections,
   cards: allCards,
   role,
@@ -101,7 +102,9 @@ export default function BoardView({
   const hasPrev = sectionIndex > 0;
   const hasNext = sectionIndex < sections.length - 1;
 
-  const title = `${lesson.order}차시${division ? ` · ${division.name}` : ""}`;
+  // 교육 보드는 회차·차시 없이 보드 이름이 제목이다
+  const title = lesson ? `${lesson.order}차시${division ? ` · ${division.name}` : ""}` : (educationBoard?.name ?? "보드");
+  const description = lesson ? lesson.description : (educationBoard?.description ?? "");
 
   // 이미 창이 열려 있으면 창 안의 첨부 칸이 파일을 받는다 (창은 포털이라 이벤트가 여기까지 올라온다)
   const acceptsDrop = post && !!section && !cardFormOpen && !editingCard;
@@ -303,11 +306,15 @@ export default function BoardView({
           items={[
             { label: rootLabel(mode), to: basePath(mode) },
             { label: educationTitle(education.name), to: educationPath(mode, education.id) },
-            { label: roundLabel(round), to: roundPath(mode, education.id, round.id) },
-            division
-              ? { label: `${lesson.order}차시`, to: lessonPath(mode, education.id, round.id, lesson.id) }
-              : { label: `${lesson.order}차시` },
-            ...(division ? [{ label: division.name }] : []),
+            ...(round && lesson
+              ? [
+                  { label: roundLabel(round), to: roundPath(mode, education.id, round.id) },
+                  division
+                    ? { label: `${lesson.order}차시`, to: lessonPath(mode, education.id, round.id, lesson.id) }
+                    : { label: `${lesson.order}차시` },
+                  ...(division ? [{ label: division.name }] : []),
+                ]
+              : [{ label: title }]),
           ]}
         />
       )}
@@ -315,10 +322,10 @@ export default function BoardView({
       <div className={(mode ? "mt-6 " : "") + "flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4"}>
         <div>
           <div className="text-sm text-muted-foreground">
-            {education.company?.name} · {educationTitle(education.name)} · {roundLabel(round)}
+            {[education.company?.name, educationTitle(education.name), round && roundLabel(round)].filter(Boolean).join(" · ")}
           </div>
           <h1 className="mt-1 text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{title}</h1>
-          <p className="mt-2 text-muted-foreground">{lesson.description}</p>
+          {description && <p className="mt-2 text-muted-foreground">{description}</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start">

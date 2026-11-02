@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowUpRight, Link2 } from "lucide-react";
 import { getSessionUser, homePath } from "@/lib/auth";
 import { listMyBoards } from "@/lib/data";
-import { educationTitle, roundLabel } from "@/lib/education";
+import { boardPlace, educationTitle } from "@/lib/education";
 import { roleLabel } from "@/lib/permissions";
 import AppHeader from "@/components/app/AppHeader";
 import Notice from "@/components/app/Notice";
@@ -45,7 +45,9 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         <div className="w-full max-w-3xl mx-auto px-6 py-10">
           <h1 className="text-3xl font-bold tracking-tight">내 보드</h1>
           <div className="mt-8 space-y-3">
-            {boards.map(({ board, lesson, round, education, division, role }) => (
+            {boards.map(({ role, ...ctx }) => {
+              const { board, education } = ctx;
+              return (
               <Link
                 key={board.id}
                 href={`/b/${board.id}`}
@@ -54,14 +56,13 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 <div className="flex-1 min-w-0">
                   {education.company && <div className="text-xs text-muted-foreground truncate">{education.company.name}</div>}
                   <div className="mt-0.5 font-semibold">{educationTitle(education.name)}</div>
-                  <div className="mt-0.5 text-sm text-muted-foreground">
-                    {roundLabel(round)} · {lesson.order}차시{division ? ` · ${division.name}` : ""}
-                  </div>
+                  <div className="mt-0.5 text-sm text-muted-foreground">{boardPlace(ctx)}</div>
                 </div>
                 <Badge variant="outline">{roleLabel[role]}</Badge>
                 <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

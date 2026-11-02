@@ -2,10 +2,20 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Layers, LayoutGrid, Plus, Search, Users } from "lucide-react";
-import { createLesson, createRound, deleteLesson, deleteRound, updateLesson, updateRound } from "@/app/actions/admin";
+import { ArrowUpRight, CalendarRange, Layers, LayoutGrid, Plus, Search, Users } from "lucide-react";
+import {
+  createEducationBoard,
+  createLesson,
+  createRound,
+  deleteEducationBoard,
+  deleteLesson,
+  deleteRound,
+  updateEducationBoard,
+  updateLesson,
+  updateRound,
+} from "@/app/actions/admin";
 import { educationStatusLabel, educationTitle, roundLabel } from "@/lib/education";
-import type { Board, Company, Division, Education, Lesson, Round } from "@/lib/types";
+import type { Board, Company, Division, Education, EducationBoard, Lesson, Round } from "@/lib/types";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import LessonForm from "@/components/board/LessonForm";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +37,8 @@ import {
 
 type RowProps = {
   href: string;
-  order: number | string;
+  // 왼쪽 네모 칸: 순번 또는 아이콘
+  order: React.ReactNode;
   title: string;
   description?: string;
   meta: React.ReactNode;
@@ -163,11 +174,14 @@ export function RoundList({
   mode,
   education,
   rounds,
+  educationBoards,
   actions,
 }: {
   mode: Mode;
   education: Education;
   rounds: (Round & { lessonCount: number })[];
+  // 회차·차시 없이 교육에 바로 붙은 보드
+  educationBoards: EducationBoard[];
   // 제목 오른쪽 버튼 줄 (관리자의 고객사 담당자 목록)
   actions?: React.ReactNode;
 }) {
@@ -195,37 +209,48 @@ export function RoundList({
         error={error}
         actions={actions}
       />
-      <SearchBox value={query} onChange={setQuery} placeholder="회차 검색 (제목, 설명)" />
-      {filtered.length === 0 ? (
-        <Empty>{q ? "검색 결과가 없어요." : "아직 만들어진 회차가 없어요."}</Empty>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((r) => (
-            <Row
-              key={r.id}
-              href={roundPath(mode, education.id, r.id)}
-              order={r.order}
-              title={roundLabel(r)}
-              description={r.description}
-              meta={
-                <>
-                  <Layers className="w-3.5 h-3.5" /> 차시 {r.lessonCount}
-                </>
-              }
-              action={rowMenu(
-                mode,
-                r.synced,
-                () => setEditing(r),
-                () =>
-                  setConfirm({
-                    title: `${r.order}회차를 삭제할까요?`,
-                    description: `차시 ${r.lessonCount}개와 그 안의 보드·카드·첨부 파일이 모두 삭제돼요.`,
-                    run: () => run(() => deleteRound(r.id)),
-                  }),
-              )}
-            />
-          ))}
-        </div>
+      <EducationBoards mode={mode} educationId={education.id} boards={educationBoards} run={run} setConfirm={setConfirm} />
+      {/* 기간형 차시만 있는 axhub 교육처럼 회차가 없고 교육 보드만 있으면 회차 칸은 감춘다 */}
+      {education.synced && rounds.length === 0 && educationBoards.length > 0 ? null : (
+        <>
+          {(educationBoards.length > 0 || mode === "admin") && (
+            <h2 className="mb-3 text-sm font-semibold text-muted-foreground">회차</h2>
+          )}
+          <SearchBox value={query} onChange={setQuery} placeholder="회차 검색 (제목, 설명)" />
+          {filtered.length === 0 ? (
+            <Empty>
+              {q ? "검색 결과가 없어요." : education.synced ? "axhub에 회차가 없어요." : "아직 만들어진 회차가 없어요."}
+            </Empty>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((r) => (
+                <Row
+                  key={r.id}
+                  href={roundPath(mode, education.id, r.id)}
+                  order={r.order}
+                  title={roundLabel(r)}
+                  description={r.description}
+                  meta={
+                    <>
+                      <Layers className="w-3.5 h-3.5" /> 차시 {r.lessonCount}
+                    </>
+                  }
+                  action={rowMenu(
+                    mode,
+                    r.synced,
+                    () => setEditing(r),
+                    () =>
+                      setConfirm({
+                        title: `${r.order}회차를 삭제할까요?`,
+                        description: `차시 ${r.lessonCount}개와 그 안의 보드·카드·첨부 파일이 모두 삭제돼요.`,
+                        run: () => run(() => deleteRound(r.id)),
+                      }),
+                  )}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
       <LessonForm
         open={formOpen}
@@ -248,6 +273,105 @@ export function RoundList({
       />
       <Confirmation confirm={confirm} onClose={() => setConfirm(null)} />
     </PageContainer>
+  );
+}
+
+// 교육 보드 목록 (교육 화면, 회차 목록 위). 관리자는 만들고 고치고 지울 수 있다.
+// axhub 교육이라도 직접 만든 보드는 동기화가 건드리지 않는다. 기간형 보드는 동기화가 관리한다.
+function EducationBoards({
+  mode,
+  educationId,
+  boards,
+  run,
+  setConfirm,
+}: {
+  mode: Mode;
+  educationId: string;
+  boards: EducationBoard[];
+  run: (action: () => Promise<{ error?: string }>) => void;
+  setConfirm: (confirm: Confirm) => void;
+}) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<EducationBoard | null>(null);
+  const admin = mode === "admin";
+  if (!boards.length && !admin) return null;
+
+  return (
+    <section className="mb-10">
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-muted-foreground">교육 보드</h2>
+          {admin && <p className="mt-0.5 text-xs text-muted-foreground">회차·차시와 상관없이 이 교육 전체에서 쓰는 보드예요.</p>}
+        </div>
+        {admin && (
+          <button
+            onClick={() => setFormOpen(true)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Plus className="w-4 h-4" /> 보드 만들기
+          </button>
+        )}
+      </div>
+      {boards.length === 0 ? (
+        <div className="rounded-2xl border-2 border-dashed border-border py-6 text-center text-sm text-muted-foreground">
+          아직 교육 보드가 없어요.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {boards.map((b) => (
+            <Row
+              key={b.id}
+              href={boardPath(b.id)}
+              order={b.synced ? <CalendarRange className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
+              title={b.name}
+              description={[b.synced ? "기간형" : "", b.description].filter(Boolean).join(" · ")}
+              meta={
+                <>
+                  <LayoutGrid className="w-3.5 h-3.5" /> 자료 {b.cardCount}
+                </>
+              }
+              action={
+                mode !== "client" ? (
+                  <>
+                    <CopyUrlButton boardId={b.id} />
+                    {rowMenu(
+                      mode,
+                      b.synced,
+                      () => setEditing(b),
+                      () =>
+                        setConfirm({
+                          title: `"${b.name}" 보드를 삭제할까요?`,
+                          description: `섹션과 카드 ${b.cardCount}개, 첨부 파일이 모두 삭제돼요.`,
+                          run: () => run(() => deleteEducationBoard(b.id)),
+                        }),
+                    )}
+                  </>
+                ) : undefined
+              }
+            />
+          ))}
+        </div>
+      )}
+      <LessonForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSubmit={(data) => run(() => createEducationBoard(educationId, { name: data.title ?? "", description: data.description }))}
+        nextOrder={0}
+        unitLabel="보드"
+        heading="교육 보드 만들기"
+      />
+      <LessonForm
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        initial={editing ? { title: editing.name, description: editing.description } : undefined}
+        onSubmit={(data) =>
+          editing && run(() => updateEducationBoard(editing.id, { name: data.title ?? "", description: data.description }))
+        }
+        nextOrder={0}
+        unitLabel="보드"
+        heading="교육 보드 수정"
+      />
+    </section>
   );
 }
 

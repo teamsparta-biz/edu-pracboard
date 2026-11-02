@@ -189,6 +189,17 @@ await as(student, `update cards set pin_position = -1 where id = $1`, [fakePin])
 ok("순서: 교육생이 자기 카드에 순서 값을 넣어도 무시", (await posOf(fakePin)) === null);
 await db.query(`delete from cards where id = any($1)`, [[staffCard, adminCard, fakePin]]);
 
+// ── 교육 보드: 차시 없이 교육에 바로 붙는 보드. 관리자만 만들고, 볼 수 있는 사람은 차시 보드와 같다
+const [{ id: eduBoard }] = await rows(admin, `insert into boards (education_id, name) values ($1, '공통 보드') returning id`, [edu]);
+ok("교육 보드: 관리자가 만듦", !!eduBoard);
+await expectError("교육 보드: 이름 없이 만들 수 없음", () => as(admin, `insert into boards (education_id) values ($1)`, [edu]), "boards_lesson_or_name");
+await expectError("교육 보드: 강사는 만들 수 없음", () => as(tutor, `insert into boards (education_id, name) values ($1, 'x')`, [edu]), "row-level security");
+ok("교육 보드: 교육 담당자는 봄", (await rows(client, `select id from boards where id = $1`, [eduBoard])).length === 1);
+ok("교육 보드: 참여 전 교육생은 못 봄", (await rows(student, `select id from boards where id = $1`, [eduBoard])).length === 0);
+await as(student, `select join_board($1)`, [eduBoard]);
+ok("교육 보드: URL로 참여하면 교육생", (await rows(student, `select board_role($1) as r`, [eduBoard]))[0].r === "student");
+await db.query(`delete from boards where id = $1`, [eduBoard]);
+
 // ── 외부인
 const outsider = await signup("who@naver.com");
 ok("외부인: 교육 조회 불가", (await rows(outsider, `select id from educations`)).length === 0);

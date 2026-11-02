@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
-import type { Board, BoardRole, Card, Comment, Company, Division, Education, Lesson, Round, Section, Viewer } from "@/lib/types";
+import type { Board, BoardRole, Card, Comment, Company, Division, Education, EducationBoard, Lesson, Round, Section, Viewer } from "@/lib/types";
 
 // 모든 조회는 로그인한 사용자의 세션(RLS)으로 한다. 권한 밖의 행은 DB가 걸러낸다.
 
@@ -45,8 +45,15 @@ const toDivision = (row: any): Division => ({
 
 const toBoard = (row: any): Board => ({
   id: row.id,
-  lessonId: row.lesson_id,
+  lessonId: row.lesson_id ?? undefined,
   divisionId: row.division_id ?? undefined,
+  cardCount: countOf(row.cards),
+});
+const toEducationBoard = (row: any): EducationBoard => ({
+  id: row.id,
+  name: row.name ?? "",
+  description: row.description ?? "",
+  synced: !!row.axhub_window_course_id,
   cardCount: countOf(row.cards),
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -68,16 +75,22 @@ export async function listEducations() {
 
 export async function getEducationWithRounds(educationId: string) {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("educations")
-    .select(`${EDUCATION_COLUMNS}, rounds(*, lessons(count))`)
-    .eq("id", educationId)
-    .maybeSingle();
+  const [{ data }, { data: boards }] = await Promise.all([
+    supabase.from("educations").select(`${EDUCATION_COLUMNS}, rounds(*, lessons(count))`).eq("id", educationId).maybeSingle(),
+    // 차시 없이 교육에 바로 붙은 보드 (기간형 보드가 먼저, 그다음 만든 순서)
+    supabase
+      .from("boards")
+      .select("id, name, description, axhub_window_course_id, cards(count)")
+      .eq("education_id", educationId)
+      .is("lesson_id", null)
+      .order("axhub_window_course_id", { ascending: true, nullsFirst: false })
+      .order("created_at"),
+  ]);
   if (!data) return null;
   const rounds = (data.rounds ?? [])
     .map((r: { lessons: unknown }) => ({ ...toRound(r), lessonCount: countOf(r.lessons) }))
     .sort((a: Round, b: Round) => a.order - b.order);
-  return { education: toEducation(data), rounds };
+  return { education: toEducation(data), rounds, educationBoards: (boards ?? []).map(toEducationBoard) };
 }
 
 export async function getRoundWithLessons(educationId: string, roundId: string) {
@@ -159,29 +172,31 @@ export async function listInstructors(boardId: string) {
 }
 
 const BOARD_CONTEXT_COLUMNS = `
-  id, lesson_id, division_id,
+  id, lesson_id, division_id, name, description, axhub_window_course_id,
   lesson:lessons(id, round_id, position, description, axhub_key, round:rounds(*)),
   division:divisions(id, lesson_id, position, name),
   education:educations(${EDUCATION_COLUMNS})
 `;
 
-// 보드 제목에 필요한 상위 계층 정보
+// 보드 제목에 필요한 상위 계층 정보. 교육 보드는 회차·차시 대신 educationBoard가 있다.
 export type BoardContext = {
   board: Omit<Board, "cardCount">;
-  lesson: Lesson;
-  round: Round;
+  lesson?: Lesson;
+  round?: Round;
   education: Education;
   division?: Division;
+  educationBoard?: Omit<EducationBoard, "cardCount">;
 };
 
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 function toBoardContext(row: any): BoardContext {
   return {
-    board: { id: row.id, lessonId: row.lesson_id, divisionId: row.division_id ?? undefined },
-    lesson: toLesson(row.lesson),
-    round: toRound(row.lesson.round),
+    board: { id: row.id, lessonId: row.lesson_id ?? undefined, divisionId: row.division_id ?? undefined },
+    lesson: row.lesson ? toLesson(row.lesson) : undefined,
+    round: row.lesson?.round ? toRound(row.lesson.round) : undefined,
     education: toEducation(row.education),
     division: row.division ? toDivision(row.division) : undefined,
+    educationBoard: row.lesson_id ? undefined : toEducationBoard(row),
   };
 }
 

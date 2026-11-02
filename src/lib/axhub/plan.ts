@@ -13,6 +13,10 @@ export type AxhubSession = {
   startTime: number | null; // 13.5 = 13시 30분
   endTime: number | null;
   name: string | null;
+  // 기간형(commitment = 'window')은 날짜 하루가 아니라 date ~ windowEnd 기간에 하는 활동이다.
+  // 차시를 만들지 않고 그 교육의 기간형 보드 하나로 모은다 (sync.ts).
+  window: boolean;
+  windowEnd: string | null; // YYYY-MM-DD
 };
 
 export type PlannedLesson = {
@@ -74,4 +78,21 @@ function describe(sessions: AxhubSession[]) {
   const ends = sessions.map((s) => s.endTime).filter((v): v is number => v != null);
   const time = starts.length && ends.length ? ` ${formatHour(Math.min(...starts))}–${formatHour(Math.max(...ends))}` : "";
   return `${mo}/${d}(${weekday})${time}`;
+}
+
+// 기간형 차시들 → 교육의 기간형 보드 이름·설명. 예: "온라인 멘토링", "10/26(월) ~ 12/11(금)"
+export function planWindowBoard(sessions: AxhubSession[]) {
+  const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const names = [...new Set(sorted.map((s) => s.name?.trim()).filter((n): n is string => !!n))];
+  const start = sorted[0].date;
+  const end = sorted.map((s) => s.windowEnd ?? s.date).sort().at(-1)!;
+  return {
+    name: names.join(" · ") || "기간형 활동",
+    description: start === end ? dayLabel(start) : `${dayLabel(start)} ~ ${dayLabel(end)}`,
+  };
+}
+
+function dayLabel(date: string) {
+  const [y, mo, d] = date.split("-").map(Number);
+  return `${mo}/${d}(${WEEKDAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]})`;
 }

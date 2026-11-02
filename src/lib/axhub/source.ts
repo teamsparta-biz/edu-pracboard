@@ -46,10 +46,32 @@ export async function readAxhub(knownCourseIds: string[]): Promise<AxhubSnapshot
       where course_id = any(${courseIds}::uuid[]) and status = 'active'`;
     const roundIds = rounds.map((r) => r.id);
 
-    const sessions = await sql<{ id: string; round_id: string; date: string; start_time: number | null; end_time: number | null; name: string | null }[]>`
-      select s.id, s.round_id, to_char(s.date, 'YYYY-MM-DD') as date, s.start_time, s.end_time, s.name
-      from pracboard.course_sessions s
-      where s.round_id = any(${roundIds}::uuid[]) and s.date is not null`;
+    type SessionRow = {
+      id: string;
+      round_id: string;
+      date: string;
+      start_time: number | null;
+      end_time: number | null;
+      name: string | null;
+      commitment?: string | null;
+      window_end?: string | null;
+    };
+    // 기간형 구분(commitment, window_end)은 pracboard.course_sessions 뷰에 나중에 추가됐다.
+    // 뷰에 아직 없으면(42703) 예전처럼 모든 차시를 출석형으로 읽는다.
+    let sessions: SessionRow[];
+    try {
+      sessions = await sql<SessionRow[]>`
+        select s.id, s.round_id, to_char(s.date, 'YYYY-MM-DD') as date, s.start_time, s.end_time, s.name,
+               s.commitment, to_char(s.window_end, 'YYYY-MM-DD') as window_end
+        from pracboard.course_sessions s
+        where s.round_id = any(${roundIds}::uuid[]) and s.date is not null`;
+    } catch (e) {
+      if ((e as { code?: string }).code !== "42703") throw e;
+      sessions = await sql<SessionRow[]>`
+        select s.id, s.round_id, to_char(s.date, 'YYYY-MM-DD') as date, s.start_time, s.end_time, s.name
+        from pracboard.course_sessions s
+        where s.round_id = any(${roundIds}::uuid[]) and s.date is not null`;
+    }
     const sessionIds = sessions.map((s) => s.id);
 
     const assignments = await sql<{ course_session_id: string; email: string | null; auth_email: string | null }[]>`
@@ -82,6 +104,8 @@ export async function readAxhub(knownCourseIds: string[]): Promise<AxhubSnapshot
         startTime: s.start_time,
         endTime: s.end_time,
         name: s.name,
+        window: s.commitment === "window",
+        windowEnd: s.window_end ?? null,
       })),
       assignments: [...bySession].map(([sessionId, emails]) => ({ sessionId, emails: [...emails] })),
     };

@@ -2,13 +2,16 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
 import { notifyBoards } from "@/lib/board-events";
-import { planLessons, type PlannedLesson } from "./plan";
+import { planLessons, planWindowBoard, type PlannedLesson } from "./plan";
 import { readAxhub } from "./source";
 
 // axhub → PracBoard 동기화 (PLAN.md 3절). axhub가 원본이다.
 //   - 새 교육은 준비 중·진행 중만 가져오고, 한 번 가져온 교육은 상태가 바뀌어도 계속 맞춘다.
 //   - axhub에서 사라진(또는 취소된) 교육·회차·차시는 PracBoard에서도 지운다. 보드·카드·첨부까지 지워진다.
 //   - 강사(주강사)와 고객사 담당자 권한은 추가만 하고 회수하지 않는다.
+//   - 기간형 차시(commitment = 'window')는 차시를 만들지 않고 교육마다 기간형 보드 하나로 모은다.
+//     기간형 차시만 있는 회차는 만들지 않는다.
+//   - 관리자가 직접 만든 교육 보드(차시·axhub 연결 없음)는 건드리지 않는다.
 // service role로 쓴다. 호출하는 쪽(크론 라우트, 관리자 액션)이 권한을 확인한다.
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -19,6 +22,7 @@ export type SyncSummary = {
   rounds: number;
   lessons: number;
   boards: number;
+  windowBoards: number;
   created: { boards: number };
   deleted: { educations: number; rounds: number; lessons: number; boards: number; files: number };
   granted: { viewers: number; instructors: number };
@@ -88,11 +92,16 @@ async function sync(db: Admin): Promise<SyncSummary> {
   const educationIds = [...educationId.values()];
 
   // ── 회차 (active만. 취소·삭제된 회차는 아래에서 지운다)
+  // 기간형 차시만 있는 회차는 만들지 않는다 (그 차시들은 교육의 기간형 보드로 간다). 차시가 아직 없는 회차는 만든다.
+  const attendance = ax.sessions.filter((s) => !s.window);
+  const windowSessions = ax.sessions.filter((s) => s.window);
+  const roundsWithAttendance = new Set(attendance.map((s) => s.roundId));
+  const windowOnlyRounds = new Set(windowSessions.map((s) => s.roundId).filter((id) => !roundsWithAttendance.has(id)));
   const rounds = await upsertReturning<{ id: string; axhub_round_id: string; education_id: string }>(
     db,
     "rounds",
     ax.rounds
-      .filter((r) => educationId.has(r.courseId))
+      .filter((r) => educationId.has(r.courseId) && !windowOnlyRounds.has(r.id))
       .map((r) => ({
         axhub_round_id: r.id,
         education_id: educationId.get(r.courseId)!,
@@ -109,19 +118,65 @@ async function sync(db: Admin): Promise<SyncSummary> {
   // ── 차시·분반 묶기
   const planned: (PlannedLesson & { educationId: string; roundDbId: string })[] = [];
   for (const [axRoundId, r] of round) {
-    const sessions = ax.sessions.filter((s) => s.roundId === axRoundId);
+    const sessions = attendance.filter((s) => s.roundId === axRoundId);
     for (const lesson of planLessons(axRoundId, sessions)) {
       planned.push({ ...lesson, educationId: r.education_id, roundDbId: r.id });
     }
   }
   summary.lessons = planned.length;
 
-  // 차시가 사라진 보드를 먼저 지운다. 남은 보드를 옮길 때 "차시당 보드 하나" 제약과 부딪히지 않게 하기 위함.
-  const sessionIds = new Set(planned.flatMap((l) => l.sessions.map((s) => s.session.id)));
-  const existingBoards = await selectIn<{ id: string; axhub_session_id: string | null }>(
-    db, "boards", "id, axhub_session_id", "education_id", educationIds,
+  // ── 기간형 보드 (교육마다 하나. 키 = axhub 교육 id)
+  const courseOfRound = new Map(ax.rounds.map((r) => [r.id, r.courseId]));
+  const windowByCourse = new Map<string, typeof windowSessions>();
+  for (const s of windowSessions) {
+    const courseId = courseOfRound.get(s.roundId);
+    if (!courseId || !educationId.has(courseId)) continue;
+    windowByCourse.set(courseId, [...(windowByCourse.get(courseId) ?? []), s]);
+  }
+  type ExistingBoard = { id: string; axhub_session_id: string | null; axhub_window_course_id: string | null };
+  const before = await selectIn<ExistingBoard>(db, "boards", "id, axhub_session_id, axhub_window_course_id", "education_id", educationIds);
+  // 기간형 차시에 이미 차시 보드가 있으면(기간형 구분 전에 만들어진 보드) 지우지 않고 기간형 보드로 바꿔 카드를 지킨다
+  const hadWindowBoard = new Set(before.map((b) => b.axhub_window_course_id).filter(Boolean));
+  for (const [courseId, sessions] of windowByCourse) {
+    if (hadWindowBoard.has(courseId)) continue;
+    const ids = new Set(sessions.map((s) => s.id));
+    const old = before.find((b) => b.axhub_session_id && ids.has(b.axhub_session_id));
+    if (!old) continue;
+    await must(
+      db
+        .from("boards")
+        .update({ lesson_id: null, division_id: null, axhub_session_id: null, axhub_window_course_id: courseId, ...planWindowBoard(sessions) })
+        .eq("id", old.id),
+    );
+    old.axhub_session_id = null;
+    old.axhub_window_course_id = courseId;
+  }
+  const windowBoards = await upsertReturning<{ id: string; axhub_window_course_id: string }>(
+    db,
+    "boards",
+    [...windowByCourse].map(([courseId, sessions]) => ({
+      axhub_window_course_id: courseId,
+      education_id: educationId.get(courseId)!,
+      lesson_id: null,
+      division_id: null,
+      ...planWindowBoard(sessions),
+    })),
+    "axhub_window_course_id",
+    "id, axhub_window_course_id",
   );
-  const goneBoards = existingBoards.filter((b) => !b.axhub_session_id || !sessionIds.has(b.axhub_session_id)).map((b) => b.id);
+  summary.windowBoards = windowBoards.length;
+  summary.created.boards += windowBoards.filter((b) => !before.some((e) => e.axhub_window_course_id === b.axhub_window_course_id)).length;
+
+  // 차시가 사라진 보드를 먼저 지운다. 남은 보드를 옮길 때 "차시당 보드 하나" 제약과 부딪히지 않게 하기 위함.
+  // 직접 만든 교육 보드(axhub 연결 없음)는 남긴다. 기간형 차시가 모두 없어진 교육의 기간형 보드는 지운다.
+  const sessionIds = new Set(planned.flatMap((l) => l.sessions.map((s) => s.session.id)));
+  const goneBoards = before
+    .filter((b) =>
+      b.axhub_session_id
+        ? !sessionIds.has(b.axhub_session_id)
+        : !!b.axhub_window_course_id && !windowByCourse.has(b.axhub_window_course_id),
+    )
+    .map((b) => b.id);
   summary.deleted.boards = await deleteIn(db, "boards", "id", goneBoards);
 
   const lessons = await upsertReturning<{ id: string; axhub_key: string }>(
@@ -159,7 +214,7 @@ async function sync(db: Admin): Promise<SyncSummary> {
   const divisionId = new Map(divisions.map((d) => [d.axhub_session_id, d.id]));
 
   // ── 보드 (axhub 차시 하나 = 보드 하나. 분반이 생기거나 없어져도 같은 보드가 옮겨진다)
-  const existingSessionBoards = new Set(existingBoards.map((b) => b.axhub_session_id));
+  const existingSessionBoards = new Set(before.map((b) => b.axhub_session_id));
   const boards = await upsertReturning<{ id: string; axhub_session_id: string }>(
     db,
     "boards",
@@ -175,8 +230,13 @@ async function sync(db: Admin): Promise<SyncSummary> {
     "id, axhub_session_id",
   );
   summary.boards = boards.length;
-  summary.created.boards = boards.filter((b) => !existingSessionBoards.has(b.axhub_session_id)).length;
+  summary.created.boards += boards.filter((b) => !existingSessionBoards.has(b.axhub_session_id)).length;
+  // axhub 차시 id → 보드 id. 기간형 차시는 그 교육의 기간형 보드로 간다 (주강사 권한도 그 보드에).
   const boardId = new Map(boards.map((b) => [b.axhub_session_id, b.id]));
+  const windowBoardId = new Map(windowBoards.map((b) => [b.axhub_window_course_id, b.id]));
+  for (const [courseId, sessions] of windowByCourse) {
+    for (const s of sessions) boardId.set(s.id, windowBoardId.get(courseId)!);
+  }
 
   // 보드를 옮긴 뒤에 남은 분반·차시·회차를 지운다
   const keptDivisions = new Set(divisions.map((d) => d.id));
@@ -310,6 +370,7 @@ function emptySummary(): SyncSummary {
     rounds: 0,
     lessons: 0,
     boards: 0,
+    windowBoards: 0,
     created: { boards: 0 },
     deleted: { educations: 0, rounds: 0, lessons: 0, boards: 0, files: 0 },
     granted: { viewers: 0, instructors: 0 },

@@ -52,10 +52,21 @@ export type Division = {
 };
 
 // 최소 단위 교육. 고유 URL(/b/[id])을 가진다.
+// 보통은 차시(또는 분반)에 속하고, 교육 보드(EducationBoard)는 차시 없이 교육에 바로 붙는다.
 export type Board = {
   id: string;
-  lessonId: string;
+  lessonId?: string;
   divisionId?: string;
+  cardCount: number;
+};
+
+// 교육 단위 보드. 관리자가 직접 만들거나(수동), axhub의 기간형 차시를 모아 동기화가 만든다(synced).
+export type EducationBoard = {
+  id: string;
+  name: string;
+  description: string;
+  // 기간형 보드. 동기화가 이름을 맞추고 지우므로 화면에서 고치거나 지울 수 없다.
+  synced: boolean;
   cardCount: number;
 };
 

@@ -18,6 +18,8 @@ type Props = {
   nextOrder: number;
   unitLabel?: string;
   withTitle?: boolean;
+  // 창 제목. 없으면 "3차시 만들기"처럼 순번과 단위로 만든다
+  heading?: string;
   // 있으면 수정
   initial?: LessonFormData;
 };
@@ -31,7 +33,7 @@ export default function LessonForm({ open, ...props }: Props) {
   );
 }
 
-function LessonFormBody({ onClose, onSubmit, nextOrder, unitLabel = "차시", withTitle = true, initial }: Omit<Props, "open">) {
+function LessonFormBody({ onClose, onSubmit, nextOrder, unitLabel = "차시", withTitle = true, heading, initial }: Omit<Props, "open">) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
 
@@ -47,10 +49,7 @@ function LessonFormBody({ onClose, onSubmit, nextOrder, unitLabel = "차시", wi
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          {nextOrder}
-          {unitLabel} {initial ? "수정" : "만들기"}
-        </DialogTitle>
+        <DialogTitle>{heading ?? `${nextOrder}${unitLabel} ${initial ? "수정" : "만들기"}`}</DialogTitle>
       </DialogHeader>
 
       <div className="space-y-4">
