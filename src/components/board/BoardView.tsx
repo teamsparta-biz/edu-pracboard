@@ -431,7 +431,7 @@ export default function BoardView({
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      <div className="relative mt-6 px-0 sm:px-20 min-h-[340px]">
+      <div className="relative mt-6 px-0 sm:px-12 lg:-mx-6 min-h-[340px]">
         {/* 화살표는 카드 영역 높이만큼의 세로 레일 안에서 화면 가운데에 붙어 있어, 스크롤해도 따라온다 */}
         {hasPrev && (
           <div className="hidden sm:block absolute left-0 inset-y-0 pt-[152px]">
@@ -461,7 +461,7 @@ export default function BoardView({
             <p className="text-muted-foreground">아직 만들어진 섹션이 없어요.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5" {...pinDropZone}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5" {...pinDropZone}>
             {cards.map((c) => (
               <BoardCard
                 key={c.id}

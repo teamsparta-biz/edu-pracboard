@@ -22,6 +22,8 @@ type Props = {
 
 export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike, drag }: Props) {
   const { dragging, ...dragHandlers } = drag ?? { dragging: false };
+  const [linkImageBroken, setLinkImageBroken] = useState(false);
+  const dark = hasPicture(card, linkImageBroken);
   return (
     <div
       onClick={() => onOpen(card)}
@@ -48,7 +50,38 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLik
         </span>
       )}
 
-      <CardThumbnail card={card} />
+      {/* 작성자·하트·댓글 수는 썸네일 아래쪽에 얹는다. 이미지가 있으면 어둡게 깔고 흰 글씨, 없으면(아이콘만 있는 회색 칸) 진한 글씨 */}
+      <div className="relative">
+        <CardThumbnail card={card} onLinkImageError={() => setLinkImageBroken(true)} />
+        <div
+          className={
+            "absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-3 pb-2.5 text-xs " +
+            (dark ? "pt-10 bg-gradient-to-t from-black/70 via-black/35 to-transparent text-white" : "pt-2 text-muted-foreground")
+          }
+        >
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={
+                "w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-medium text-foreground " +
+                (dark ? "bg-white/90" : "bg-white border border-border")
+              }
+            >
+              {card.author.charAt(0)}
+            </span>
+            {/* 하트·댓글 수가 들어가 날짜는 카드 상세에서만 보여준다. 좁은 카드에서 이름이 잘리지 않게 하기 위함 */}
+            <span className={"truncate font-medium " + (dark ? "[text-shadow:0_1px_2px_rgb(0_0_0/0.4)]" : "")} title={`${card.author} · ${card.createdAt}`}>
+              {card.author}
+            </span>
+          </span>
+          <span className="flex items-center gap-2.5 shrink-0 tabular-nums">
+            <LikeButton count={card.likedBy.length} liked={liked} onClick={onLike && (() => onLike(card))} dark={dark} />
+            <span className="flex items-center gap-1" aria-label={`댓글 ${card.comments.length}개`}>
+              <MessageCircle className="w-3.5 h-3.5" />
+              {card.comments.length}
+            </span>
+          </span>
+        </div>
+      </div>
 
       <div className="p-4 flex flex-col flex-1">
         <h3 className="font-semibold text-sm line-clamp-1">{card.title}</h3>
@@ -68,24 +101,6 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLik
             <span className="truncate">{card.link}</span>
           </a>
         )}
-        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5 min-w-0">
-            <span className="w-5 h-5 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-foreground">
-              {card.author.charAt(0)}
-            </span>
-            {/* 하트·댓글 수가 들어가 날짜는 카드 상세에서만 보여준다. 좁은 카드에서 이름이 잘리지 않게 하기 위함 */}
-            <span className="truncate" title={`${card.author} · ${card.createdAt}`}>
-              {card.author}
-            </span>
-          </span>
-          <span className="flex items-center gap-2.5 shrink-0 tabular-nums">
-            <LikeButton count={card.likedBy.length} liked={liked} onClick={onLike && (() => onLike(card))} />
-            <span className="flex items-center gap-1" aria-label={`댓글 ${card.comments.length}개`}>
-              <MessageCircle className="w-3.5 h-3.5" />
-              {card.comments.length}
-            </span>
-          </span>
-        </div>
         <CommentPreview card={card} />
       </div>
     </div>
@@ -115,8 +130,22 @@ function CommentPreview({ card }: { card: Card }) {
 }
 
 // 누를 수 없으면 수만 보여준다
-export function LikeButton({ count, liked, onClick, className = "" }: { count: number; liked: boolean; onClick?: () => void; className?: string }) {
-  const icon = <Heart className={"w-3.5 h-3.5 " + (liked ? "fill-rose-500 text-rose-500" : "")} />;
+// dark: 어두운 썸네일 위에 얹을 때
+export function LikeButton({
+  count,
+  liked,
+  onClick,
+  className = "",
+  dark = false,
+}: {
+  count: number;
+  liked: boolean;
+  onClick?: () => void;
+  className?: string;
+  dark?: boolean;
+}) {
+  const likedColor = dark ? "fill-rose-400 text-rose-400" : "fill-rose-500 text-rose-500";
+  const icon = <Heart className={"w-3.5 h-3.5 " + (liked ? likedColor : "")} />;
   if (!onClick) {
     return (
       <span className={"flex items-center gap-1 " + className} aria-label={`하트 ${count}개`}>
@@ -134,7 +163,11 @@ export function LikeButton({ count, liked, onClick, className = "" }: { count: n
       }}
       aria-pressed={liked}
       aria-label={liked ? `하트 취소 (${count}개)` : `하트 누르기 (${count}개)`}
-      className={"flex items-center gap-1 rounded-full -mx-1 px-1 py-0.5 hover:text-rose-500 hover:bg-rose-50 transition-colors " + (liked ? "text-rose-500 " : "") + className}
+      className={
+        "flex items-center gap-1 rounded-full -mx-1 px-1 py-0.5 transition-colors " +
+        (dark ? "hover:bg-white/20 " + (liked ? "text-rose-300 " : "") : "hover:text-rose-500 hover:bg-rose-50 " + (liked ? "text-rose-500 " : "")) +
+        className
+      }
     >
       {icon}
       {count}
@@ -144,9 +177,17 @@ export function LikeButton({ count, liked, onClick, className = "" }: { count: n
 
 const box = "relative h-44 bg-muted flex items-center justify-center overflow-hidden";
 
-function CardThumbnail({ card }: { card: Card }) {
+// 썸네일에 그림(이미지·동영상·HTML 화면·링크 대표 이미지)이 있는지. 있으면 작성자 줄을 어둡게 얹는다.
+function hasPicture(card: Card, linkImageBroken: boolean) {
   const a = card.attachment;
-  if (!a) return <LinkThumbnail card={card} />;
+  if (!a) return !!card.linkImage && !linkImageBroken;
+  const kind = attachmentKind(a.type);
+  return kind === "image" || kind === "video" || kind === "html";
+}
+
+function CardThumbnail({ card, onLinkImageError }: { card: Card; onLinkImageError: () => void }) {
+  const a = card.attachment;
+  if (!a) return <LinkThumbnail card={card} onError={onLinkImageError} />;
 
   const kind = attachmentKind(a.type);
   if (kind === "image") {
@@ -186,7 +227,7 @@ function CardThumbnail({ card }: { card: Card }) {
 }
 
 // 첨부 없이 링크만 있는 카드: 링크 페이지의 대표 이미지, 없으면 사이트 주소를 보여준다
-function LinkThumbnail({ card }: { card: Card }) {
+function LinkThumbnail({ card, onError }: { card: Card; onError: () => void }) {
   const [broken, setBroken] = useState<string>();
   const host = card.link ? hostOf(card.link) : undefined;
   if (card.linkImage && broken !== card.linkImage) {
@@ -199,7 +240,10 @@ function LinkThumbnail({ card }: { card: Card }) {
           alt={card.title}
           draggable={false}
           referrerPolicy="no-referrer"
-          onError={() => setBroken(card.linkImage)}
+          onError={() => {
+            setBroken(card.linkImage);
+            onError();
+          }}
           className="absolute inset-0 w-full h-full object-cover"
           loading="lazy"
         />
