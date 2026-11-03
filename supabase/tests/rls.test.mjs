@@ -161,7 +161,7 @@ await as(tutor, `insert into card_likes (card_id, board_id, user_id) values ($1,
 await as(student, `delete from cards where id = $1`, [likeCard]);
 ok("카드를 지우면 하트·댓글도 지워짐", (await db.query(`select 1 from card_likes union all select 1 from card_comments`)).rows.length === 0);
 
-// ── 고정 카드: 관리자·강사가 올린 카드만 고정되고, 아무도 바꿀 수 없다
+// ── 고정 카드: 관리자·강사가 올린 카드는 처음부터 고정되고, 교육생은 바꿀 수 없다
 const pinnedOf = async (id) => (await db.query(`select pinned from cards where id = $1`, [id])).rows[0].pinned;
 const [{ id: staffCard }] = await rows(tutor, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, '강사') returning id`, [board, section, tutor.id]);
 const [{ id: adminCard }] = await rows(admin, `insert into cards (board_id, section_id, author_id, author_name) values ($1, $2, $3, '관리자') returning id`, [board, section, admin.id]);
@@ -170,8 +170,8 @@ ok("고정: 강사 카드", (await pinnedOf(staffCard)) === true);
 ok("고정: 관리자 카드", (await pinnedOf(adminCard)) === true);
 ok("고정: 교육생이 pinned=true로 넣어도 고정 안 됨", (await pinnedOf(fakePin)) === false);
 await as(student, `update cards set pinned = true where id = $1`, [fakePin]);
-await as(tutor, `update cards set pinned = false where id = $1`, [staffCard]);
-ok("고정: 수정으로 바꿀 수 없음", (await pinnedOf(fakePin)) === false && (await pinnedOf(staffCard)) === true);
+await as(student, `update cards set pinned = false where id = $1`, [staffCard]);
+ok("고정: 교육생은 수정으로 바꿀 수 없음", (await pinnedOf(fakePin)) === false && (await pinnedOf(staffCard)) === true);
 
 // ── 고정 카드 순서: 새 고정 카드는 맨 뒤, 관리자·강사만 순서를 바꾼다
 const pinOrder = async () =>
@@ -187,6 +187,18 @@ await expectError("순서: 교육생은 바꿀 수 없음", () => as(student, `s
 await expectError("순서: 고객사 담당자는 바꿀 수 없음", () => as(client, `select reorder_pinned_cards($1, $2)`, [section, [adminCard, staffCard]]), "not allowed");
 await as(student, `update cards set pin_position = -1 where id = $1`, [fakePin]);
 ok("순서: 교육생이 자기 카드에 순서 값을 넣어도 무시", (await posOf(fakePin)) === null);
+
+// ── 고정 켜고 끄기 (2026-11-03): 관리자·강사는 어떤 카드든 고정하거나 풀 수 있다
+await as(tutor, `update cards set pinned = true where id = $1`, [fakePin]);
+ok("고정 켜기: 강사가 교육생 카드를 고정하면 맨 뒤", (await pinnedOf(fakePin)) === true && (await pinOrder()) === [staffCard, adminCard, fakePin].join());
+await as(admin, `update cards set pinned = false where id = $1`, [staffCard]);
+ok("고정 끄기: 관리자가 강사 카드 고정을 풀면 순서 값도 지워짐", (await pinnedOf(staffCard)) === false && (await posOf(staffCard)) === null);
+await as(client, `update cards set pinned = true where id = $1`, [staffCard]);
+ok("고정 켜기: 교육 담당자는 못 함", (await pinnedOf(staffCard)) === false);
+await as(student, `update cards set pinned = false where id = $1`, [fakePin]);
+ok("고정 끄기: 교육생은 자기 카드라도 못 품", (await pinnedOf(fakePin)) === true);
+await as(student, `update cards set title = '고친 제목' where id = $1`, [fakePin]);
+ok("고정된 자기 카드도 내용은 고칠 수 있음", (await db.query(`select title from cards where id = $1`, [fakePin])).rows[0].title === "고친 제목" && (await pinnedOf(fakePin)) === true);
 await db.query(`delete from cards where id = any($1)`, [[staffCard, adminCard, fakePin]]);
 
 // ── 교육 보드: 차시 없이 교육에 바로 붙는 보드. 관리자만 만들고, 볼 수 있는 사람은 차시 보드와 같다

@@ -163,3 +163,59 @@ test("한글·공백·괄호가 든 파일 이름이 그대로 내려받아진�
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "내려받기" }).click()]);
   expect(download.suggestedFilename()).toBe(name);
 });
+
+// 2026-11-03: 고정 켜고 끄기, 다중 선택
+
+test("강사는 카드 메뉴로 교육생 카드를 고정·해제하고, 여러 장을 골라 한꺼번에 고정하고 지운다", async ({ page, browser }) => {
+  const studentEmail = f.email("student");
+  const student = await (await browser.newContext()).newPage();
+  await joinBoard(student, f, "최교육", studentEmail);
+  for (const title of ["가 결과물", "나 결과물", "다 결과물", "라 결과물"]) await seedCard(f, studentEmail, title);
+
+  const tutorEmail = f.email("tutor");
+  await registerInstructor(f, tutorEmail);
+  await signIn(page, tutorEmail);
+  await page.goto(boardUrl(f));
+  const titles = page.getByRole("heading", { level: 3 });
+  await expect(titles).toHaveText(["가 결과물", "나 결과물", "다 결과물", "라 결과물"]);
+
+  // 카드 메뉴: 교육생 카드를 고정하면 맨 앞으로, 풀면 올린 순서 자리로
+  const menuOf = (title: string) => page.getByRole("heading", { name: title }).locator("xpath=ancestor::div[contains(@class,'group')][1]").getByRole("button", { name: "카드 메뉴" });
+  await page.getByRole("heading", { name: "다 결과물" }).hover();
+  await menuOf("다 결과물").click();
+  await page.getByRole("menuitem", { name: "상단 고정" }).click();
+  await expect(titles).toHaveText(["다 결과물", "가 결과물", "나 결과물", "라 결과물"]);
+  await expect(page.getByText("고정", { exact: true })).toHaveCount(1);
+  await page.getByRole("heading", { name: "다 결과물" }).hover();
+  await menuOf("다 결과물").click();
+  await page.getByRole("menuitem", { name: "고정 해제" }).click();
+  await expect(titles).toHaveText(["가 결과물", "나 결과물", "다 결과물", "라 결과물"]);
+
+  // 다중 선택: 두 장 고정 → 고정된 순서는 보이던 순서 그대로
+  await page.getByRole("button", { name: "선택", exact: true }).click();
+  await page.getByRole("checkbox", { name: "나 결과물 선택" }).click();
+  await page.getByRole("checkbox", { name: "라 결과물 선택" }).click();
+  const bar = page.getByRole("toolbar", { name: "선택한 카드" });
+  await expect(bar.getByText("2개 선택")).toBeVisible();
+  await bar.getByRole("button", { name: "고정", exact: true }).click();
+  await expect(titles).toHaveText(["나 결과물", "라 결과물", "가 결과물", "다 결과물"]);
+
+  // 다중 선택: 세 장 지우기 (카드를 눌러도 열리지 않고 선택만 바뀐다)
+  for (const t of ["나 결과물", "가 결과물", "다 결과물"]) await page.getByRole("checkbox", { name: `${t} 선택` }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await bar.getByRole("button", { name: "삭제" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "삭제" }).click();
+  await expect(titles).toHaveText(["라 결과물"]);
+  await expect(bar).toHaveCount(0);
+  await expect(student.getByRole("heading", { level: 3 })).toHaveText(["라 결과물"]);
+
+  // 교육생: 선택 버튼도, 고정 메뉴도 없다
+  await expect(student.getByRole("button", { name: "선택", exact: true })).toHaveCount(0);
+  await seedCard(f, studentEmail, "내 카드");
+  await student.reload();
+  await student.getByRole("heading", { name: "내 카드" }).hover();
+  await student.getByRole("heading", { name: "내 카드" }).locator("xpath=ancestor::div[contains(@class,'group')][1]").getByRole("button", { name: "카드 메뉴" }).click();
+  await expect(student.getByRole("menuitem", { name: "수정" })).toBeVisible();
+  await expect(student.getByRole("menuitem", { name: /고정/ })).toHaveCount(0);
+  await student.context().close();
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Code2, FileText, GripVertical, Heart, Link as LinkIcon, MessageCircle, Music, Pin, Play } from "lucide-react";
+import { Check, Code2, FileText, GripVertical, Heart, Link as LinkIcon, MessageCircle, Music, Pin, Play } from "lucide-react";
 import type { Card } from "@/lib/types";
 import { attachmentKind } from "@/lib/storage";
 import ItemMenu from "@/components/app/ItemMenu";
@@ -18,35 +18,57 @@ type Props = {
   onLike?: (card: Card) => void;
   // 고정 카드 순서를 바꿀 수 있으면(관리자·강사) 끌기 이벤트를 넘긴다
   drag?: React.HTMLAttributes<HTMLDivElement> & { dragging: boolean };
+  // 상단 고정 켜기·끄기 (관리자·강사)
+  onPin?: (card: Card) => void;
+  // 다중 선택 중이면 넘긴다. 카드를 누르면 열지 않고 선택을 바꾼다.
+  select?: { checked: boolean; onToggle: () => void };
 };
 
-export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike, drag }: Props) {
-  const { dragging, ...dragHandlers } = drag ?? { dragging: false };
+export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLike, drag, onPin, select }: Props) {
+  const { dragging, ...dragHandlers } = (!select && drag) || { dragging: false };
   const [linkImageBroken, setLinkImageBroken] = useState(false);
   const dark = hasPicture(card, linkImageBroken);
   return (
     <div
-      onClick={() => onOpen(card)}
-      draggable={!!drag}
+      onClick={() => (select ? select.onToggle() : onOpen(card))}
+      draggable={!select && !!drag}
       {...dragHandlers}
+      role={select ? "checkbox" : undefined}
+      aria-checked={select ? select.checked : undefined}
+      aria-label={select ? `${card.title} 선택` : undefined}
       className={
-        "group relative bg-white rounded-2xl border border-border overflow-hidden hover:shadow-md transition-[box-shadow,opacity] cursor-pointer flex flex-col" +
-        (drag ? " active:cursor-grabbing" : "") +
+        "group relative bg-white rounded-2xl border overflow-hidden hover:shadow-md transition-[box-shadow,opacity] cursor-pointer flex flex-col" +
+        (select?.checked ? " border-board ring-2 ring-board" : " border-border") +
+        (!select && drag ? " active:cursor-grabbing" : "") +
         (dragging ? " opacity-40 ring-2 ring-board" : "")
       }
     >
-      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 transition-opacity">
-        <ItemMenu
-          label="카드 메뉴"
-          className="bg-white/90 text-muted-foreground hover:text-foreground"
-          onEdit={onEdit && (() => onEdit(card))}
-          onDelete={onDelete && (() => onDelete(card))}
-        />
-      </div>
+      {select ? (
+        <span
+          aria-hidden
+          className={
+            "absolute top-2 right-2 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center shadow-sm transition-colors " +
+            (select.checked ? "bg-board border-board text-white" : "bg-white/90 border-white text-transparent")
+          }
+        >
+          <Check className="w-4 h-4" strokeWidth={3} />
+        </span>
+      ) : (
+        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 transition-opacity">
+          <ItemMenu
+            label="카드 메뉴"
+            className="bg-white/90 text-muted-foreground hover:text-foreground"
+            onEdit={onEdit && (() => onEdit(card))}
+            onDelete={onDelete && (() => onDelete(card))}
+            onPin={onPin && (() => onPin(card))}
+            pinned={card.pinned}
+          />
+        </div>
+      )}
 
       {card.pinned && (
         <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-board shadow-sm">
-          {drag ? <GripVertical className="w-3 h-3 -ml-0.5" /> : <Pin className="w-3 h-3" />} 고정
+          {drag && !select ? <GripVertical className="w-3 h-3 -ml-0.5" /> : <Pin className="w-3 h-3" />} 고정
         </span>
       )}
 

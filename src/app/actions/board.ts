@@ -155,6 +155,37 @@ export async function deleteCard(cardId: string): Promise<ActionResult> {
   return changed(data[0].board_id);
 }
 
+// 여러 카드를 한 번에 지운다 (관리자·강사의 다중 선택). 지울 수 없는 카드는 RLS가 걸러낸다.
+export async function deleteCards(cardIds: string[]): Promise<ActionResult> {
+  if (!cardIds.length) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("cards").delete().in("id", cardIds).select("board_id, attachment_path");
+  if (error || !data?.length) return { error: DENIED };
+  await removeFiles(data.map((c) => c.attachment_path));
+  await notifyBoards([...new Set(data.map((c) => c.board_id))]);
+  refresh();
+  return data.length < cardIds.length ? { error: `${cardIds.length - data.length}개는 지우지 못했어요.` } : {};
+}
+
+// 카드를 상단에 고정하거나 고정을 푼다. 그 보드의 관리자·강사만 바꿀 수 있다 (DB 트리거가 확인하고, 아니면 그대로 둔다).
+// 고정하면 섹션의 고정 카드 맨 뒤에 붙으므로, 넘겨준 순서대로 하나씩 바꾼다.
+export async function setCardsPinned(cardIds: string[], pinned: boolean): Promise<ActionResult> {
+  const supabase = await createClient();
+  const boards = new Set<string>();
+  let failed = 0;
+  for (const id of cardIds) {
+    const { data } = await supabase.from("cards").update({ pinned }).eq("id", id).select("board_id, pinned");
+    if (data?.[0]?.pinned === pinned) boards.add(data[0].board_id);
+    else failed++;
+  }
+  if (boards.size) {
+    await notifyBoards([...boards]);
+    refresh();
+  }
+  if (failed === cardIds.length) return { error: DENIED };
+  return failed ? { error: `${failed}개는 바꾸지 못했어요.` } : {};
+}
+
 // 고정 카드(관리자·강사 카드)의 순서를 ids 순서로 바꾼다. 관리자·강사만 할 수 있다 (DB 함수가 확인).
 export async function reorderPinnedCards(sectionId: string, ids: string[]): Promise<ActionResult> {
   const supabase = await createClient();

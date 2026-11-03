@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { Lock, Pencil, Plus, Settings2, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { CheckSquare, Lock, Pencil, Pin, PinOff, Plus, Settings2, Trash2, ChevronLeft, ChevronRight, Upload, X } from "lucide-react";
 import {
   addCard,
   addComment,
   addSection,
   createUpload,
   deleteCard,
+  deleteCards,
   deleteComment,
   deleteSection,
   renameSection,
   reorderPinnedCards,
+  setCardsPinned,
   toggleLike,
   updateCard,
   type AttachmentInput,
@@ -78,6 +80,9 @@ export default function BoardView({
   );
   // 끌고 있는 고정 카드와, 끄는 동안 미리 보여주는 고정 카드 순서
   const [pinDrag, setPinDrag] = useState<{ id: string; ids: string[] } | null>(null);
+  // 다중 선택 (관리자·강사): 지금 섹션의 카드를 골라 한꺼번에 지우거나 고정한다
+  const [selecting, setSelecting] = useState(false);
+  const [rawPicked, setPicked] = useState<string[]>([]);
 
   // 다른 사람이 바꾼 내용을 새로고침 없이 반영한다
   useBoardRealtime(board.id);
@@ -99,6 +104,9 @@ export default function BoardView({
   const section = sections[sectionIndex];
   const sectionCards = section ? shownCards.filter((c) => c.sectionId === section.id) : [];
   const cards = pinDrag ? withPinOrder(sectionCards, pinDrag.ids) : sectionCards;
+  // 실시간 반영으로 지워진 카드는 선택에서 뺀다
+  const picked = rawPicked.filter((id) => sectionCards.some((c) => c.id === id));
+  const pickedCards = sectionCards.filter((c) => picked.includes(c.id));
   const hasPrev = sectionIndex > 0;
   const hasNext = sectionIndex < sections.length - 1;
 
@@ -151,6 +159,34 @@ export default function BoardView({
             },
           })
       : undefined;
+
+  const pinHandler = manage ? (card: Card) => run(() => setCardsPinned([card.id], !card.pinned)) : undefined;
+
+  function stopSelecting() {
+    setSelecting(false);
+    setPicked([]);
+  }
+  const togglePick = (id: string) => setPicked((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  // Esc로 선택을 끝낸다 (창이 열려 있으면 창이 먼저 닫힌다)
+  useEffect(() => {
+    if (!selecting) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !confirm && stopSelecting();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecting, confirm]);
+
+  function deletePicked() {
+    const targets = pickedCards;
+    if (!targets.length) return;
+    setConfirm({
+      title: `카드 ${targets.length}개를 삭제할까요?`,
+      description: "선택한 카드와 첨부 파일, 하트·댓글이 모두 삭제돼요. 되돌릴 수 없어요.",
+      run: () => run(() => deleteCards(targets.map((c) => c.id)), stopSelecting),
+    });
+  }
+  // 보이는 순서대로 고정해야 고정 카드 사이의 순서도 그대로 간다
+  const pinPicked = (pinned: boolean) =>
+    run(() => setCardsPinned(pickedCards.filter((c) => c.pinned !== pinned).map((c) => c.id), pinned), () => setPicked([]));
 
   const likeHandler = react
     ? (card: Card) =>
@@ -231,6 +267,7 @@ export default function BoardView({
   // 섹션을 바꿀 때, 아래로 스크롤해 탭이 화면 위에 붙어 있던 상태면 새 섹션의 처음부터 보이도록 탭 위치로 올린다
   function goToSection(i: number) {
     setSectionIndex(i);
+    setPicked([]);
     const top = navAnchorRef.current ? navAnchorRef.current.getBoundingClientRect().top + window.scrollY : 0;
     if (window.scrollY > top) window.scrollTo({ top });
   }
@@ -407,6 +444,19 @@ export default function BoardView({
               <Plus className="w-4 h-4" /> 자료 올리기
             </button>
           )}
+          {manage && (
+            <button
+              onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+              disabled={!section || (!selecting && sectionCards.length === 0)}
+              aria-pressed={selecting}
+              className={
+                "inline-flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition-colors disabled:opacity-40 disabled:pointer-events-none " +
+                (selecting ? "bg-foreground text-background border-foreground" : "bg-white border-border text-foreground hover:bg-muted")
+              }
+            >
+              <CheckSquare className="w-4 h-4" /> {selecting ? "선택 끝내기" : "선택"}
+            </button>
+          )}
           {/* 섹션 추가·이름 변경·삭제는 하나의 메뉴로 묶는다. 버튼 네 개를 늘어놓으면 좁은 화면에서 깨진다. */}
           {manage && (
             <DropdownMenu>
@@ -470,8 +520,10 @@ export default function BoardView({
                 onDelete={deleteHandler(c)}
                 onOpen={setSelected}
                 liked={c.likedBy.includes(userId)}
-                onLike={likeHandler}
+                onLike={selecting ? undefined : likeHandler}
                 drag={pinDragProps(c)}
+                onPin={pinHandler}
+                select={selecting ? { checked: picked.includes(c.id), onToggle: () => togglePick(c.id) } : undefined}
               />
             ))}
           </div>
@@ -500,6 +552,47 @@ export default function BoardView({
           </div>
         )}
       </div>
+
+      {selecting && (
+        <div
+          role="toolbar"
+          aria-label="선택한 카드"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 rounded-full bg-foreground text-background shadow-xl px-2 py-2 text-sm max-w-[calc(100vw-32px)] overflow-x-auto"
+        >
+          <span className="px-3 font-medium whitespace-nowrap tabular-nums">{picked.length}개 선택</span>
+          <button
+            onClick={() => setPicked(picked.length === sectionCards.length ? [] : sectionCards.map((c) => c.id))}
+            className="whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-white/15 transition-colors"
+          >
+            {picked.length === sectionCards.length ? "선택 해제" : "전체 선택"}
+          </button>
+          <span className="w-px h-5 bg-white/20 mx-1" />
+          <button
+            onClick={() => pinPicked(true)}
+            disabled={!pickedCards.some((c) => !c.pinned) || pending}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-white/15 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Pin className="w-4 h-4" /> 고정
+          </button>
+          <button
+            onClick={() => pinPicked(false)}
+            disabled={!pickedCards.some((c) => c.pinned) || pending}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 hover:bg-white/15 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <PinOff className="w-4 h-4" /> 고정 해제
+          </button>
+          <button
+            onClick={deletePicked}
+            disabled={!picked.length || pending}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-red-300 hover:bg-white/15 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Trash2 className="w-4 h-4" /> 삭제
+          </button>
+          <button onClick={stopSelecting} aria-label="선택 끝내기" className="rounded-full p-1.5 hover:bg-white/15 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {post && (
         <CardForm
