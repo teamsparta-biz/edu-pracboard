@@ -86,7 +86,30 @@ export default function BoardCard({ card, onEdit, onDelete, onOpen, liked, onLik
             </span>
           </span>
         </div>
+        <CommentPreview card={card} />
       </div>
+    </div>
+  );
+}
+
+// 카드를 열지 않아도 최근 댓글이 보이게 한다. 나머지는 카드 상세에서.
+const PREVIEW_COMMENTS = 2;
+
+function CommentPreview({ card }: { card: Card }) {
+  const { comments } = card;
+  if (!comments.length) return null;
+  const recent = comments.slice(-PREVIEW_COMMENTS);
+  return (
+    <div className="mt-3 -mx-4 -mb-4 px-4 py-3 bg-muted/50 border-t border-border space-y-1.5" aria-label="최근 댓글">
+      {comments.length > PREVIEW_COMMENTS && (
+        <p className="text-xs text-muted-foreground">댓글 {comments.length}개 모두 보기</p>
+      )}
+      {recent.map((c) => (
+        <p key={c.id} className="text-xs leading-relaxed line-clamp-2 break-all">
+          <span className="font-semibold mr-1.5">{c.author}</span>
+          <span className="text-foreground/80">{c.content}</span>
+        </p>
+      ))}
     </div>
   );
 }

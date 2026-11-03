@@ -28,6 +28,9 @@ test("교육생은 하트를 누르고 댓글을 달고, 교육 담당자는 보
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("잘 봤어요")).toBeVisible();
   await expect(dialog.getByText("최교육", { exact: true }).last()).toBeVisible();
+  // 카드를 닫아도 보드에서 최근 댓글이 보인다
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("최근 댓글").getByText("잘 봤어요")).toBeVisible();
 
   // 교육 담당자: 수와 댓글은 보이지만 누르거나 쓸 수 없다
   const viewerEmail = f.email("viewer");
@@ -36,6 +39,7 @@ test("교육생은 하트를 누르고 댓글을 달고, 교육 담당자는 보
   await signIn(viewer, viewerEmail);
   await viewer.goto(boardUrl(f));
   await expect(viewer.getByLabel("하트 1개")).toBeVisible();
+  await expect(viewer.getByLabel("최근 댓글").getByText("잘 봤어요")).toBeVisible();
   await expect(viewer.getByRole("button", { name: /하트 (누르기|취소)/ })).toHaveCount(0);
   await viewer.getByRole("heading", { name: "하트 받을 카드" }).click();
   await expect(viewer.getByRole("dialog").getByText("잘 봤어요")).toBeVisible();
