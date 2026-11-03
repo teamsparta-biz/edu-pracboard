@@ -18,7 +18,7 @@ export type AxhubSnapshot = {
   courses: AxhubCourse[];
   rounds: AxhubRound[];
   sessions: AxhubSession[];
-  // 주강사만 (PLAN.md 2.2절)
+  // 배정된 강사 전원 — 주강사·기술튜터·멘토 (PLAN.md 2.2절, 2026-11-03)
   assignments: AxhubAssignment[];
 };
 
@@ -78,7 +78,7 @@ export async function readAxhub(knownCourseIds: string[]): Promise<AxhubSnapshot
       select a.course_session_id, i.email, i.auth_email
       from pracboard.assignments a
       join pracboard.instructors i on i.id = a.instructor_id
-      where a.course_session_id = any(${sessionIds}::uuid[]) and a.role_category = 'main_instructor'`;
+      where a.course_session_id = any(${sessionIds}::uuid[])`;
 
     const bySession = new Map<string, Set<string>>();
     for (const a of assignments) {

@@ -8,7 +8,8 @@ import { readAxhub } from "./source";
 // axhub → PracBoard 동기화 (PLAN.md 3절). axhub가 원본이다.
 //   - 새 교육은 준비 중·진행 중만 가져오고, 한 번 가져온 교육은 상태가 바뀌어도 계속 맞춘다.
 //   - axhub에서 사라진(또는 취소된) 교육·회차·차시는 PracBoard에서도 지운다. 보드·카드·첨부까지 지워진다.
-//   - 강사(주강사)와 고객사 담당자 권한은 추가만 하고 회수하지 않는다.
+//   - 강사(주강사·기술튜터·멘토) 권한은 axhub 배정과 맞춘다. 빠지면 회수하되, 직접 등록한 강사는 두고 간다.
+//   - 고객사 담당자 권한은 추가만 하고 회수하지 않는다.
 //   - 기간형 차시(commitment = 'window')는 차시를 만들지 않고 교육마다 기간형 보드 하나로 모은다.
 //     기간형 차시만 있는 회차는 만들지 않는다.
 //   - 관리자가 직접 만든 교육 보드(차시·axhub 연결 없음)는 건드리지 않는다.
@@ -26,6 +27,7 @@ export type SyncSummary = {
   created: { boards: number };
   deleted: { educations: number; rounds: number; lessons: number; boards: number; files: number };
   granted: { viewers: number; instructors: number };
+  revoked: { instructors: number };
 };
 
 // 동시에 두 번 돌지 않게 한다. 이 시간이 지나도 안 끝난 실행은 실패로 본다.
@@ -269,14 +271,50 @@ async function sync(db: Admin): Promise<SyncSummary> {
   }
   summary.granted.viewers = viewerRows.length;
 
-  // 이미 교육생으로 참여한 사람이 주강사로 배정되면 강사로 바꾼다
-  const instructorRows = ax.assignments
-    .filter((a) => boardId.has(a.sessionId))
-    .flatMap((a) => a.emails.map((email) => ({ board_id: boardId.get(a.sessionId)!, email, role: "instructor" })));
-  for (const part of chunks(instructorRows, 200)) {
+  // ── 강사 권한: axhub 배정(주강사·기술튜터·멘토)과 맞춘다 (PLAN.md 2.2절)
+  //   배정된 사람은 강사로(교육생으로 참여 중이었으면 강사로 바꾼다), 배정에서 빠진 사람은 회수한다.
+  //   관리자가 직접 등록한 강사(source = manual)는 건드리지 않는다.
+  //   출처가 없는 예전 강사 권한(source = null)은 지금 배정에 있으면 axhub, 없으면 manual로 정해 남긴다.
+  const key = (board: string, email: string) => `${board}|${email}`;
+  const assigned = new Map<string, { board_id: string; email: string }>();
+  for (const a of ax.assignments) {
+    const board = boardId.get(a.sessionId);
+    if (board) for (const email of a.emails) assigned.set(key(board, email), { board_id: board, email });
+  }
+  const members = await selectIn<{ board_id: string; email: string; role: string; source: string | null }>(
+    db,
+    "board_members",
+    "board_id, email, role, source",
+    "board_id",
+    [...new Set(boardId.values())],
+  );
+  const existing = new Map(members.map((m) => [key(m.board_id, m.email), m]));
+  const grants = [...assigned]
+    .filter(([k]) => {
+      const m = existing.get(k);
+      return !m || m.role !== "instructor" || m.source === null;
+    })
+    .map(([, m]) => ({ ...m, role: "instructor", source: "axhub" }));
+  const legacy = members
+    .filter((m) => m.role === "instructor" && m.source === null && !assigned.has(key(m.board_id, m.email)))
+    .map((m) => ({ board_id: m.board_id, email: m.email, role: "instructor", source: "manual" }));
+  for (const part of chunks([...grants, ...legacy], 200)) {
     await must(db.from("board_members").upsert(part, { onConflict: "board_id,email" }));
   }
-  summary.granted.instructors = instructorRows.length;
+  summary.granted.instructors = grants.length;
+
+  // 배정을 하나도 못 읽었으면(axhub 쪽 문제일 수 있음) 한꺼번에 회수하지 않는다
+  const revoke = ax.assignments.length
+    ? members.filter((m) => m.role === "instructor" && m.source === "axhub" && !assigned.has(key(m.board_id, m.email)))
+    : [];
+  const revokeByBoard = new Map<string, string[]>();
+  for (const m of revoke) revokeByBoard.set(m.board_id, [...(revokeByBoard.get(m.board_id) ?? []), m.email]);
+  for (const [board, emails] of revokeByBoard) {
+    await must(db.from("board_members").delete().eq("board_id", board).eq("source", "axhub").in("email", emails));
+  }
+  summary.revoked.instructors = revoke.length;
+  // 회수된 강사가 보고 있던 화면이 다시 읽어 권한을 확인하게 한다
+  goneBoards.push(...revokeByBoard.keys());
 
   // ── 지워진 보드의 첨부 파일 정리, 열려 있던 화면에 알림
   const orphaned = await removeOrphanFiles(db);
@@ -374,5 +412,6 @@ function emptySummary(): SyncSummary {
     created: { boards: 0 },
     deleted: { educations: 0, rounds: 0, lessons: 0, boards: 0, files: 0 },
     granted: { viewers: 0, instructors: 0 },
+    revoked: { instructors: 0 },
   };
 }

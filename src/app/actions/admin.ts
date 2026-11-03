@@ -253,7 +253,8 @@ export async function addInstructor(boardId: string, rawEmail: string): Promise<
   const supabase = await createClient();
   const { error } = await supabase
     .from("board_members")
-    .upsert({ board_id: boardId, email, role: "instructor" }, { onConflict: "board_id,email" });
+    // 직접 등록한 강사는 axhub 동기화가 회수하지 않는다
+    .upsert({ board_id: boardId, email, role: "instructor", source: "manual" }, { onConflict: "board_id,email" });
   if (error) return { error: DENIED };
   refresh();
   return {};

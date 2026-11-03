@@ -164,11 +164,11 @@ export async function listInstructors(boardId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("board_members")
-    .select("email")
+    .select("email, source")
     .eq("board_id", boardId)
     .eq("role", "instructor")
     .order("created_at");
-  return data ?? [];
+  return (data ?? []).map((m) => ({ email: m.email as string, source: (m.source ?? undefined) as "axhub" | "manual" | undefined }));
 }
 
 const BOARD_CONTEXT_COLUMNS = `
