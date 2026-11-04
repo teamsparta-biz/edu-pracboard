@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { BookOpen, LayoutGrid, Search } from "lucide-react";
 import {
-  EDUCATION_PHASES,
+  EDUCATION_TABS,
   educationPhase,
   educationStatusLabel,
   educationTitle,
-  type EducationPhase,
+  type EducationTab,
 } from "@/lib/education";
 import type { Education } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +32,12 @@ export default function EducationList({
 }) {
   const isAdmin = mode === "admin";
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<EducationPhase>(
-    EDUCATION_PHASES.some((p) => p.key === initialTab) ? (initialTab as EducationPhase) : "operation",
+  const [tab, setTab] = useState<EducationTab>(
+    EDUCATION_TABS.some((p) => p.key === initialTab) ? (initialTab as EducationTab) : "all",
   );
+  const inTab = (e: EducationItem, key: EducationTab) => key === "all" || educationPhase(e.status) === key;
 
-  const selectTab = (next: EducationPhase) => {
+  const selectTab = (next: EducationTab) => {
     setTab(next);
     window.history.replaceState(null, "", `?tab=${next}`);
   };
@@ -47,7 +48,7 @@ export default function EducationList({
     ? educations.filter((e) => [e.name, e.company?.name ?? ""].some((v) => v.toLowerCase().includes(q)))
     : educations;
   // 고객사 담당자·강사는 볼 수 있는 교육이 적어서 탭 없이 전부 보여준다.
-  const filtered = isAdmin ? searched.filter((e) => educationPhase(e.status) === tab) : searched;
+  const filtered = isAdmin ? searched.filter((e) => inTab(e, tab)) : searched;
 
   return (
     <PageContainer wide={isAdmin}>
@@ -72,8 +73,8 @@ export default function EducationList({
       {isAdmin && (
         <div className="mb-6 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
           <div role="tablist" className="inline-flex self-start p-1 rounded-xl bg-muted">
-            {EDUCATION_PHASES.map((p) => {
-              const count = searched.filter((e) => educationPhase(e.status) === p.key).length;
+            {EDUCATION_TABS.map((p) => {
+              const count = searched.filter((e) => inTab(e, p.key)).length;
               const active = tab === p.key;
               return (
                 <button

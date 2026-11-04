@@ -38,10 +38,14 @@ export function educationStatusLabel(status?: string | null) {
   }
 }
 
-// 관리자 첫 화면의 탭 구분. 중단된 교육은 종료에, 상태가 없는 직접 만든 교육은 교육 중에 둔다.
+// 관리자 첫 화면의 교육 단계 구분. 중단된 교육은 종료에, 상태가 없는 직접 만든 교육은 교육 중에 둔다.
 export type EducationPhase = "setup" | "operation" | "ended";
 
-export const EDUCATION_PHASES: { key: EducationPhase; label: string }[] = [
+// 첫 탭 "전체"는 단계와 상관없이 모든 교육을 보여준다 (기본 탭).
+export type EducationTab = "all" | EducationPhase;
+
+export const EDUCATION_TABS: { key: EducationTab; label: string }[] = [
+  { key: "all", label: "전체" },
   { key: "setup", label: "교육 준비" },
   { key: "operation", label: "교육 중" },
   { key: "ended", label: "교육 종료" },
