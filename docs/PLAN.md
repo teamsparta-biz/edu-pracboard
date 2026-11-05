@@ -187,6 +187,7 @@ Supabase 인증·DB로 동작한다 (2.1, 2.2절). 스키마는 `supabase/migrat
   - 다루는 흐름: 교육생 참여·이메일 재로그인, 미등록·팀스파르타 이메일 거부, 카드 작성·수정·삭제와 첨부, 실시간 반영, 고객사 담당자·강사·교육생·외부인 권한, 관리자 화면·담당자 등록·axhub 교육 잠금.
   - 관리자는 Google 로그인이라 자동 테스트가 통과할 수 없어서, **테스트 전용 로그인**(`/api/test-login`)을 쓴다. 개발 모드 + `TEST_LOGIN_SECRET` 일치 + 운영 DB가 아님, 세 조건이 모두 맞을 때만 동작한다. 테스트 관리자(`e2e-admin@teamsparta.co`)에는 E2E DB에서만 Google 로그인 수단을 연결해 둔다.
   - 화면 QA: `QA_SCREENS=1 npx playwright test screens` — 주요 화면·창을 데스크톱(1440px)·모바일(390px)로 캡처해 `test-results/screens/`에 저장한다. 평소 테스트 실행에서는 건너뛴다.
+  - **주 1회 자동 실행 (2026-11-05):** GitHub Actions(`.github/workflows/weekly-tests.yml`)가 매주 월요일 05:00(KST)에 권한 테스트, E2E DB 마이그레이션, E2E 테스트를 차례로 돌린다. 값은 Repository secrets에서 `.env.e2e`를 만들어 쓴다. Actions 탭에서 직접 돌릴 수도 있다.
   - E2E DB 마이그레이션: `npm run db:migrate:e2e` (`.env.e2e`의 `DATABASE_URL`, 운영 프로젝트면 거부). 운영 DB는 지금처럼 SQL Editor로 적용한다.
 - 최근 만든 Supabase 프로젝트는 새 테이블에 API 역할 권한을 자동으로 주지 않는다. 그래서 테이블 권한을 마이그레이션에 명시한다 (`20260930020000_api_grants.sql`).
 
