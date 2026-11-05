@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,9 +23,27 @@ export function Field({
 export function SubmitButton({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="mt-6 w-full">
-      {pending ? "처리 중..." : children}
-    </Button>
+    <>
+      <Button type="submit" disabled={pending} className="mt-6 w-full">
+        {pending ? "처리 중..." : children}
+      </Button>
+      {pending && <SlowHint />}
+    </>
+  );
+}
+
+// 로그인이 몰려 기다리는 중이면(verifyInBrowser) 새로고침하지 않게 안내한다
+function SlowHint() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!slow) return null;
+  return (
+    <p className="mt-2 text-center text-xs text-muted-foreground">
+      접속하는 사람이 많아 순서를 기다리고 있어요. 창을 닫지 말고 잠시만 기다려 주세요.
+    </p>
   );
 }
 

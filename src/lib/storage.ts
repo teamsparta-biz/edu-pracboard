@@ -7,8 +7,22 @@ export const MAX_ATTACHMENT_BYTES = 200 * 1024 * 1024;
 
 export type AttachmentKind = "image" | "video" | "audio" | "html" | "file";
 
+// 브라우저가 그릴 수 있는 이미지만 그림으로 보여준다. 아이폰 사진(HEIC)·TIFF 등은 깨진 그림이 되므로 파일로 보여준다.
+const RENDERABLE_IMAGES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/apng",
+  "image/bmp",
+  "image/svg+xml",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+]);
+
 export function attachmentKind(type: string): AttachmentKind {
-  if (type.startsWith("image/")) return "image";
+  if (RENDERABLE_IMAGES.has(type)) return "image";
   if (type === "text/html") return "html";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";

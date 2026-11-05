@@ -12,7 +12,7 @@ import {
 } from "@/lib/education";
 import type { Education } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { CompanyChip, PageContainer, ReadOnlyBadge, educationPath, type Mode } from "./shared";
+import { CompanyChip, PageContainer, ReadOnlyBadge, RemovedBadge, educationPath, type Mode } from "./shared";
 
 type EducationItem = Education & { roundCount: number; boardCount: number };
 
@@ -126,6 +126,7 @@ export default function EducationList({
                     {educationStatusLabel(ed.status)}
                   </Badge>
                 )}
+                {ed.removedAt && <RemovedBadge removedAt={ed.removedAt} />}
               </div>
               <h2 className="mt-4 text-lg font-semibold leading-snug flex-1">{educationTitle(ed.name)}</h2>
               <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

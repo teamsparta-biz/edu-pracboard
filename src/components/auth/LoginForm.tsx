@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { signInWithEmail } from "@/app/actions/auth";
+import { finishSignIn, signInWithEmail, type FormResult } from "@/app/actions/auth";
+import { verifyInBrowser } from "@/lib/supabase/verify";
 import { Divider, Field, FormError, GoogleButton, SubmitButton } from "./AuthFields";
 
 const linkErrors: Record<string, string> = {
@@ -10,7 +11,15 @@ const linkErrors: Record<string, string> = {
 
 // 관리자는 Google, 강사·고객사 담당자·교육생은 이메일만으로 로그인한다.
 export default function LoginForm({ next = "/", linkError }: { next?: string; linkError?: string }) {
-  const [state, action] = useActionState(signInWithEmail, {});
+  // 서버가 준 로그인 토큰을 브라우저에서 세션으로 바꾼 뒤 이동한다 (verifyInBrowser)
+  const [state, action] = useActionState(async (prev: FormResult, formData: FormData): Promise<FormResult> => {
+    const result = await signInWithEmail(prev, formData);
+    if (!result.tokenHash) return result;
+    const error = await verifyInBrowser(result.tokenHash);
+    if (error) return { error, values: result.values };
+    await finishSignIn(next);
+    return {};
+  }, {});
 
   return (
     <div className="w-full max-w-sm bg-white rounded-2xl border border-border p-7 shadow-sm">
@@ -25,7 +34,6 @@ export default function LoginForm({ next = "/", linkError }: { next?: string; li
       <Divider label="강사 · 교육 담당자 · 교육생" />
 
       <form action={action}>
-        <input type="hidden" name="next" value={next} />
         <Field
           label="이메일"
           name="email"

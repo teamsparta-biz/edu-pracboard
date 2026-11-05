@@ -125,13 +125,14 @@ export async function seedCard(f: Fixture, authorEmail: string, title: string) {
 export const boardUrl = (f: Fixture) => `/b/${f.boardId}`;
 
 // 보드 URL에서 처음 참여 (교육생): 이메일 → 처음 보는 이메일이라 이름을 더 입력
-export async function joinBoard(page: Page, f: Fixture, name: string, email: string) {
+// timeout: 여러 명이 동시에 참여하는 테스트에서 늘린다
+export async function joinBoard(page: Page, f: Fixture, name: string, email: string, { timeout = 10_000 } = {}) {
   await page.goto(boardUrl(f));
   await page.getByLabel("이메일").fill(email);
   await page.getByRole("button", { name: "들어가기" }).click();
   await page.getByLabel("이름").fill(name);
   await page.getByRole("button", { name: "참여하기" }).click();
-  await expect(page.getByRole("button", { name: "자료 올리기" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "자료 올리기" })).toBeVisible({ timeout });
 }
 
 // 로그인 화면에서 이메일만으로 로그인 (강사·고객사 담당자·교육생)

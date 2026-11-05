@@ -142,13 +142,32 @@ test("HTML 결과물은 격리된 창에 미리보기로 보인다", async ({ pa
   await page.getByRole("button", { name: "등록하기" }).click();
   await expect(page.getByRole("heading", { name: "내 웹페이지" })).toBeVisible();
 
-  // 카드 썸네일: 스크립트는 돌지만 보드 화면에는 접근하지 못한다
+  // 카드 썸네일: 화면만 그리고 스크립트는 돌리지 않는다 (2026-11-05)
   const thumb = page.frameLocator('iframe[title="내 웹페이지"]').first();
-  await expect(thumb.getByRole("heading")).toHaveText("안녕 PracBoard 격리됨");
+  await expect(thumb.getByRole("heading")).toHaveText("안녕 PracBoard");
 
-  // 상세: 같은 내용을 크게 보여준다
+  // 상세: 스크립트가 돌지만 보드 화면에는 접근하지 못한다
   await page.getByRole("heading", { name: "내 웹페이지" }).click();
   await expect(page.getByRole("dialog").frameLocator("iframe").getByRole("heading")).toHaveText("안녕 PracBoard 격리됨");
+});
+
+test("무한 반복하는 HTML을 올려도 보드 목록은 멈추지 않는다", async ({ page }) => {
+  await joinBoard(page, f, "최교육", f.email("student"));
+  await page.getByRole("button", { name: "자료 올리기" }).click();
+  await page.getByPlaceholder("자료의 제목을 입력하세요").fill("멈추는 페이지");
+  const html = `<!doctype html><meta charset="utf-8"><h1>반복</h1><script>for (;;) {}</script>`;
+  await page.locator('input[type="file"]').setInputFiles({ name: "loop.html", mimeType: "text/html", buffer: Buffer.from(html) });
+  await page.getByRole("button", { name: "등록하기" }).click();
+  await expect(page.frameLocator('iframe[title="멈추는 페이지"]').first().getByRole("heading")).toHaveText("반복");
+
+  // 보드 화면이 계속 반응한다
+  const responsive = await Promise.race([
+    page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(true)))),
+    new Promise((resolve) => setTimeout(() => resolve(false), 3000)),
+  ]);
+  expect(responsive).toBe(true);
+  await page.getByRole("button", { name: "자료 올리기" }).click();
+  await expect(page.getByPlaceholder("자료의 제목을 입력하세요")).toBeVisible();
 });
 
 test("한글·공백·괄호가 든 파일 이름이 그대로 내려받아진다", async ({ page }) => {

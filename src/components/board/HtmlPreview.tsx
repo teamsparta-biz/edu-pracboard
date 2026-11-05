@@ -49,10 +49,12 @@ export default function HtmlPreview({ url, size, title, variant, fallback }: Pro
 
   if (variant === "thumbnail") {
     // 데스크톱 화면 폭으로 그린 뒤 1/4로 줄인다. 누르면 카드가 열리도록 창 안으로는 입력을 보내지 않는다.
+    // 보드 목록에서는 스크립트를 돌리지 않는다 (2026-11-05). 무한 반복·무거운 애니메이션이 든 파일 하나가
+    // 보드를 보는 모두의 화면(특히 사파리·아이패드)을 멈추거나 느리게 할 수 있어서. 카드를 열면 실행된다.
     return (
       <iframe
         srcDoc={text}
-        sandbox="allow-scripts"
+        sandbox=""
         title={title}
         loading="lazy"
         tabIndex={-1}

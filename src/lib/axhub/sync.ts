@@ -2,12 +2,15 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CARD_IMAGE_BUCKET } from "@/lib/storage";
 import { notifyBoards } from "@/lib/board-events";
+import { AXHUB_HOLD_DAYS } from "@/lib/education";
 import { planLessons, planWindowBoard, type PlannedLesson } from "./plan";
 import { readAxhub } from "./source";
 
 // axhub → PracBoard 동기화 (PLAN.md 3절). axhub가 원본이다.
 //   - 새 교육은 준비 중·진행 중만 가져오고, 한 번 가져온 교육은 상태가 바뀌어도 계속 맞춘다.
 //   - axhub에서 사라진(또는 취소된) 교육·회차·차시는 PracBoard에서도 지운다. 보드·카드·첨부까지 지워진다.
+//     단, 카드가 있는 교육·보드는 AXHUB_HOLD_DAYS 동안 보관했다가 지운다. 그 사이 axhub에 다시 나타나면 원래대로 돌아간다.
+//     차시가 사라진 보드는 차시에서 떼어 교육 보드로 둔다. axhub에서 교육을 하나도 못 읽으면 아무것도 지우지 않고 멈춘다.
 //   - 강사(주강사·기술튜터·멘토) 권한은 axhub 배정과 맞춘다. 빠지면 회수하되, 직접 등록한 강사는 두고 간다.
 //   - 고객사 담당자 권한은 추가만 하고 회수하지 않는다.
 //   - 기간형 차시(commitment = 'window')는 차시를 만들지 않고 교육마다 기간형 보드 하나로 모은다.
@@ -26,12 +29,14 @@ export type SyncSummary = {
   windowBoards: number;
   created: { boards: number };
   deleted: { educations: number; rounds: number; lessons: number; boards: number; files: number };
+  held: { educations: number; boards: number };
   granted: { viewers: number; instructors: number };
   revoked: { instructors: number };
 };
 
 // 동시에 두 번 돌지 않게 한다. 이 시간이 지나도 안 끝난 실행은 실패로 본다.
 const STALE_RUN_MS = 10 * 60 * 1000;
+const HOLD_MS = AXHUB_HOLD_DAYS * 24 * 60 * 60 * 1000;
 
 export async function runAxhubSync(trigger: "cron" | "manual"): Promise<SyncSummary> {
   const db = createAdminClient();
@@ -58,16 +63,32 @@ export async function runAxhubSync(trigger: "cron" | "manual"): Promise<SyncSumm
 async function sync(db: Admin): Promise<SyncSummary> {
   const summary = emptySummary();
 
-  const known = await selectAll<{ id: string; axhub_course_id: string }>(
-    db.from("educations").select("id, axhub_course_id").not("axhub_course_id", "is", null),
+  const known = await selectAll<{ id: string; axhub_course_id: string; axhub_missing_since: string | null }>(
+    db.from("educations").select("id, axhub_course_id, axhub_missing_since").not("axhub_course_id", "is", null),
   );
   const ax = await readAxhub(known.map((e) => e.axhub_course_id));
   summary.courses = ax.courses.length;
+  // 뷰가 바뀌었거나 권한 문제로 빈 결과가 오면 모든 교육이 사라진 것으로 보게 된다
+  if (known.length && !ax.courses.length) throw new Error("axhub에서 교육을 하나도 읽지 못해 아무것도 바꾸지 않고 멈췄어요.");
 
-  // ── axhub에서 사라진 교육
+  // ── axhub에서 사라진 교육. 카드가 없으면 지우고, 있으면 보관한다.
   const fetched = new Set(ax.courses.map((c) => c.id));
-  const goneEducations = known.filter((e) => !fetched.has(e.axhub_course_id)).map((e) => e.id);
-  summary.deleted.educations = await deleteIn(db, "educations", "id", goneEducations);
+  const goneEducations = known.filter((e) => !fetched.has(e.axhub_course_id));
+  const goneEducationBoards = await selectIn<{ education_id: string; cards: { count: number }[] }>(
+    db,
+    "boards",
+    "education_id, cards(count)",
+    "education_id",
+    goneEducations.map((e) => e.id),
+  );
+  const educationsWithCards = new Set(goneEducationBoards.filter((b) => countOf(b.cards) > 0).map((b) => b.education_id));
+  const educationHold = await holdOrDelete(
+    db,
+    "educations",
+    goneEducations.map((e) => ({ id: e.id, since: e.axhub_missing_since, hasCards: educationsWithCards.has(e.id) })),
+  );
+  summary.deleted.educations = educationHold.deleted;
+  summary.held.educations = educationHold.kept.size;
 
   // ── 고객사 (이름으로 찾는다)
   const companyNames = [...new Set(ax.courses.map((c) => c.clientName).filter((n): n is string => !!n))];
@@ -86,6 +107,7 @@ async function sync(db: Admin): Promise<SyncSummary> {
       name: c.title,
       status: c.status,
       company_id: c.clientName ? (companyId.get(c.clientName) ?? null) : null,
+      axhub_missing_since: null,
     })),
     "axhub_course_id",
     "id, axhub_course_id",
@@ -135,8 +157,21 @@ async function sync(db: Admin): Promise<SyncSummary> {
     if (!courseId || !educationId.has(courseId)) continue;
     windowByCourse.set(courseId, [...(windowByCourse.get(courseId) ?? []), s]);
   }
-  type ExistingBoard = { id: string; axhub_session_id: string | null; axhub_window_course_id: string | null };
-  const before = await selectIn<ExistingBoard>(db, "boards", "id, axhub_session_id, axhub_window_course_id", "education_id", educationIds);
+  type ExistingBoard = {
+    id: string;
+    axhub_session_id: string | null;
+    axhub_window_course_id: string | null;
+    lesson_id: string | null;
+    axhub_missing_since: string | null;
+    cards: { count: number }[];
+  };
+  const before = await selectIn<ExistingBoard>(
+    db,
+    "boards",
+    "id, axhub_session_id, axhub_window_course_id, lesson_id, axhub_missing_since, cards(count)",
+    "education_id",
+    educationIds,
+  );
   // 기간형 차시에 이미 차시 보드가 있으면(기간형 구분 전에 만들어진 보드) 지우지 않고 기간형 보드로 바꿔 카드를 지킨다
   const hadWindowBoard = new Set(before.map((b) => b.axhub_window_course_id).filter(Boolean));
   for (const [courseId, sessions] of windowByCourse) {
@@ -162,6 +197,7 @@ async function sync(db: Admin): Promise<SyncSummary> {
       lesson_id: null,
       division_id: null,
       ...planWindowBoard(sessions),
+      axhub_missing_since: null,
     })),
     "axhub_window_course_id",
     "id, axhub_window_course_id",
@@ -169,17 +205,25 @@ async function sync(db: Admin): Promise<SyncSummary> {
   summary.windowBoards = windowBoards.length;
   summary.created.boards += windowBoards.filter((b) => !before.some((e) => e.axhub_window_course_id === b.axhub_window_course_id)).length;
 
-  // 차시가 사라진 보드를 먼저 지운다. 남은 보드를 옮길 때 "차시당 보드 하나" 제약과 부딪히지 않게 하기 위함.
-  // 직접 만든 교육 보드(axhub 연결 없음)는 남긴다. 기간형 차시가 모두 없어진 교육의 기간형 보드는 지운다.
+  // 차시가 사라진 보드를 먼저 정리한다. 남은 보드를 옮길 때 "차시당 보드 하나" 제약과 부딪히지 않게 하기 위함.
+  // 직접 만든 교육 보드(axhub 연결 없음)는 남긴다. 기간형 차시가 모두 없어진 교육의 기간형 보드도 정리한다.
+  // 카드가 있으면 보관한다. 차시 보드는 아래에서 차시가 지워질 때 함께 지워지지 않게 떼어 교육 보드로 둔다.
+  // axhub 차시 id(axhub_session_id)는 남겨 두어, 차시가 다시 나타나면 아래 보드 upsert가 제자리로 돌려놓는다.
   const sessionIds = new Set(planned.flatMap((l) => l.sessions.map((s) => s.session.id)));
-  const goneBoards = before
-    .filter((b) =>
-      b.axhub_session_id
-        ? !sessionIds.has(b.axhub_session_id)
-        : !!b.axhub_window_course_id && !windowByCourse.has(b.axhub_window_course_id),
-    )
-    .map((b) => b.id);
-  summary.deleted.boards = await deleteIn(db, "boards", "id", goneBoards);
+  const gone = before.filter((b) =>
+    b.axhub_session_id
+      ? !sessionIds.has(b.axhub_session_id)
+      : !!b.axhub_window_course_id && !windowByCourse.has(b.axhub_window_course_id),
+  );
+  const boardHold = await holdOrDelete(
+    db,
+    "boards",
+    gone.map((b) => ({ id: b.id, since: b.axhub_missing_since, hasCards: countOf(b.cards) > 0 })),
+  );
+  await detachFromLessons(db, gone.filter((b) => b.lesson_id && boardHold.kept.has(b.id)).map((b) => b.id));
+  summary.deleted.boards = boardHold.deleted;
+  summary.held.boards = boardHold.kept.size;
+  const goneBoards = gone.map((b) => b.id);
 
   const lessons = await upsertReturning<{ id: string; axhub_key: string }>(
     db,
@@ -226,6 +270,10 @@ async function sync(db: Admin): Promise<SyncSummary> {
         education_id: l.educationId,
         lesson_id: lessonId.get(l.key)!,
         division_id: l.sessions.length > 1 ? divisionId.get(s.session.id)! : null,
+        // 보관 중이던(교육 보드로 떼어 둔) 보드가 돌아오면 차시 보드로 되돌린다
+        name: null,
+        description: "",
+        axhub_missing_since: null,
       })),
     ),
     "axhub_session_id",
@@ -324,6 +372,42 @@ async function sync(db: Admin): Promise<SyncSummary> {
   return summary;
 }
 
+// axhub에서 사라진 교육·보드를 정리한다. 카드가 없거나 보관 기간이 지났으면 지우고,
+// 카드가 있으면 남겨 두고 처음 사라진 시각을 적는다. kept: 보관 중인 id
+async function holdOrDelete(db: Admin, table: "educations" | "boards", items: { id: string; since: string | null; hasCards: boolean }[]) {
+  const now = Date.now();
+  const kept = new Set(
+    items.filter((i) => i.hasCards && (i.since === null || now - Date.parse(i.since) <= HOLD_MS)).map((i) => i.id),
+  );
+  const mark = items.filter((i) => kept.has(i.id) && i.since === null).map((i) => i.id);
+  for (const part of chunks(mark, 100)) {
+    await must(db.from(table).update({ axhub_missing_since: new Date(now).toISOString() }).in("id", part));
+  }
+  const deleted = await deleteIn(db, table, "id", items.filter((i) => !kept.has(i.id)).map((i) => i.id));
+  return { deleted, kept };
+}
+
+// 보관하는 차시 보드를 차시에서 떼어 교육 보드로 둔다. 이름은 원래 위치("1회차 · 2차시 · A반").
+async function detachFromLessons(db: Admin, boardIds: string[]) {
+  type Row = {
+    id: string;
+    lesson: { position: number; round: { position: number } | null } | null;
+    division: { name: string } | null;
+  };
+  const rows = await selectIn<Row>(db, "boards", "id, lesson:lessons(position, round:rounds(position)), division:divisions(name)", "id", boardIds);
+  for (const b of rows) {
+    const place = [b.lesson?.round ? `${b.lesson.round.position}회차` : "", b.lesson ? `${b.lesson.position}차시` : "", b.division?.name ?? ""];
+    await must(
+      db
+        .from("boards")
+        .update({ lesson_id: null, division_id: null, name: place.filter(Boolean).join(" · ") || "삭제된 차시" })
+        .eq("id", b.id),
+    );
+  }
+}
+
+const countOf = (rel?: { count: number }[]) => rel?.[0]?.count ?? 0;
+
 // 보드가 없어진 첨부 파일을 지운다. 파일 경로는 "<board_id>/<user_id>/<파일>" (예전 파일은 "<board_id>/<파일>").
 async function removeOrphanFiles(db: Admin) {
   const storage = db.storage.from(CARD_IMAGE_BUCKET);
@@ -411,6 +495,7 @@ function emptySummary(): SyncSummary {
     windowBoards: 0,
     created: { boards: 0 },
     deleted: { educations: 0, rounds: 0, lessons: 0, boards: 0, files: 0 },
+    held: { educations: 0, boards: 0 },
     granted: { viewers: 0, instructors: 0 },
     revoked: { instructors: 0 },
   };

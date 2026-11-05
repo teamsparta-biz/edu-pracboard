@@ -22,6 +22,8 @@ export type Education = {
   status?: string;
   // axhub에서 온 항목은 동기화가 관리하므로 화면에서 만들기·수정·삭제를 막는다
   synced: boolean;
+  // axhub에서 사라져 보관 중이면 사라진 시각 (holdUntilLabel)
+  removedAt?: string;
   // axhub 원본 교육명. "[기업명] - 교육명" 형태이며, 화면에는 educationTitle()로 교육명만 보여준다.
   name: string;
 };
@@ -67,6 +69,8 @@ export type EducationBoard = {
   description: string;
   // 기간형 보드. 동기화가 이름을 맞추고 지우므로 화면에서 고치거나 지울 수 없다.
   synced: boolean;
+  // axhub에서 차시가 사라져 보관 중이면 사라진 시각 (holdUntilLabel)
+  removedAt?: string;
   cardCount: number;
 };
 
@@ -110,6 +114,8 @@ export type Comment = {
 // 내려받기는 누를 때 원래 파일 이름으로 서명 URL을 따로 발급한다 (getAttachmentDownloadUrl).
 export type Attachment = {
   url: string;
+  // 보드 목록용 작은 이미지. 없으면 url(원본)을 쓴다
+  thumbUrl?: string;
   name: string;
   type: string;
   size?: number;

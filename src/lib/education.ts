@@ -21,6 +21,16 @@ export function boardPlace(ctx: {
   return `${roundLabel(ctx.round)} · ${ctx.lesson.order}차시${ctx.division ? ` · ${ctx.division.name}` : ""}`;
 }
 
+// axhub에서 사라진 교육·보드 중 카드가 있는 것은 이 기간 동안 보관했다가 동기화가 지운다 (PLAN.md 3.1절)
+export const AXHUB_HOLD_DAYS = 30;
+
+// 보관 중인 항목의 영구 삭제 예정일 (예: "12/5")
+export function holdUntilLabel(missingSince: string) {
+  const until = new Date(new Date(missingSince).getTime() + AXHUB_HOLD_DAYS * 24 * 60 * 60 * 1000);
+  const [, m, d] = until.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }).split("-").map(Number);
+  return `${m}/${d}`;
+}
+
 // axhub 교육 상태 (setup → operation → tax_invoice → closed, 중간에 멈추면 stopped)
 export function educationStatusLabel(status?: string | null) {
   switch (status) {

@@ -217,7 +217,7 @@ function CardThumbnail({ card, onLinkImageError }: { card: Card; onLinkImageErro
       <div className={box}>
         {/* 비공개 파일의 서명 URL이라 이미지 최적화(공용 캐시)를 거치지 않는다 */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={a.url} alt={card.title} draggable={false} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        <img src={a.thumbUrl ?? a.url} alt={card.title} draggable={false} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
       </div>
     );
   }

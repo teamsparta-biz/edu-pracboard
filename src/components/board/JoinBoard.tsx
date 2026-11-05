@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { enterBoard } from "@/app/actions/auth";
+import { enterBoard, joinBoard, type EnterResult } from "@/app/actions/auth";
+import { verifyInBrowser } from "@/lib/supabase/verify";
 import { Divider, Field, FormError, GoogleButton, SubmitButton } from "@/components/auth/AuthFields";
 
 type Props = {
@@ -13,7 +14,15 @@ type Props = {
 // 로그인하지 않은 사용자가 보드 URL로 들어왔을 때의 입장 화면.
 // 이메일을 먼저 받고, 처음 보는 이메일이면 이름을 더 받아 이 보드의 교육생으로 참여시킨다.
 export default function JoinBoard({ boardId, title, subtitle }: Props) {
-  const [state, action] = useActionState(enterBoard, {});
+  // 서버가 준 로그인 토큰을 브라우저에서 세션으로 바꾼 뒤 보드에 참여한다 (verifyInBrowser)
+  const [state, action] = useActionState(async (prev: EnterResult, formData: FormData): Promise<EnterResult> => {
+    const result = await enterBoard(prev, formData);
+    if (!result.tokenHash) return result;
+    const error = await verifyInBrowser(result.tokenHash);
+    if (error) return { error, values: result.values };
+    await joinBoard(boardId);
+    return {};
+  }, {});
   const needName = !!state.needName;
 
   return (
@@ -29,7 +38,6 @@ export default function JoinBoard({ boardId, title, subtitle }: Props) {
 
         {/* 단계가 바뀌면 입력칸을 새로 만들어 기본값이 다시 채워지게 한다 */}
         <form action={action} key={needName ? "name" : "email"}>
-          <input type="hidden" name="boardId" value={boardId} />
           <div className="mt-6 space-y-4">
             <div>
               <Field

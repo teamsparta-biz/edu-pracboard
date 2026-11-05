@@ -42,10 +42,10 @@ export async function renameSection(sectionId: string, name: string): Promise<Ac
 
 export async function deleteSection(sectionId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { data: files } = await supabase.from("cards").select("attachment_path").eq("section_id", sectionId);
+  const { data: files } = await supabase.from("cards").select("attachment_path, attachment_thumb_path").eq("section_id", sectionId);
   const { data, error } = await supabase.from("sections").delete().eq("id", sectionId).select("board_id");
   if (error || !data?.length) return { error: DENIED };
-  await removeFiles(files?.map((c) => c.attachment_path));
+  await removeFiles(files?.flatMap((c) => [c.attachment_path, c.attachment_thumb_path]));
   return changed(data[0].board_id);
 }
 
@@ -68,7 +68,14 @@ export async function createUpload(boardId: string, fileName: string, size: numb
   return { path: data.path, token: data.token };
 }
 
-export type AttachmentInput = { path: string; name: string; type: string; size: number };
+// thumbPath: 보드 목록에 보여줄 작은 이미지 (makeThumbnail). 없으면 원본을 보여준다.
+// 카드를 만들지 못해 쓸모없어진 업로드를 지운다. 본인이 이 보드에 올린 파일만.
+export async function deleteUpload(boardId: string, path: string) {
+  const user = await getSessionUser();
+  if (user && ownPath(boardId, user.id, path)) await removeFiles([path]);
+}
+
+export type AttachmentInput = { path: string; name: string; type: string; size: number; thumbPath?: string };
 
 export type CardInput = {
   title: string;
@@ -84,34 +91,51 @@ const attachmentColumns = (a: AttachmentInput | null) => ({
   attachment_name: a?.name.normalize("NFC") ?? null,
   attachment_type: a?.type || (a ? "application/octet-stream" : null),
   attachment_size: a?.size ?? null,
+  attachment_thumb_path: a?.thumbPath ?? null,
 });
+
+// 링크는 웹 주소만 받는다. "github.com/x"처럼 https 없이 넣으면 붙인다 (그대로 두면 보드 안의 상대 주소가 된다).
+// javascript: 같은 다른 형식이나 주소가 아닌 글은 저장하지 않는다.
+function normalizeLink(link: string | undefined) {
+  const value = link?.trim();
+  if (!value) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(withScheme);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname.includes(".") ? withScheme : null;
+  } catch {
+    return null;
+  }
+}
 
 const uploadPrefix = (boardId: string, userId: string) => `${boardId}/${userId}/`;
 
 // 이 보드에 본인이 올린 파일만 받는다. 남의 파일 경로를 넣어 그 파일을 지우거나 가져가는 것을 막는다.
+const ownPath = (boardId: string, userId: string, path: string) => path.startsWith(uploadPrefix(boardId, userId)) && !path.includes("..");
 const ownUpload = (boardId: string, userId: string, a: AttachmentInput | null | undefined) =>
-  !a || (a.path.startsWith(uploadPrefix(boardId, userId)) && !a.path.includes(".."));
+  !a || (ownPath(boardId, userId, a.path) && (!a.thumbPath || ownPath(boardId, userId, a.thumbPath)));
 
 export async function addCard(boardId: string, sectionId: string, input: CardInput): Promise<ActionResult> {
   const user = await getSessionUser();
   if (!user || !ownUpload(boardId, user.id, input.attachment)) return { error: DENIED };
 
   const supabase = await createClient();
+  const link = normalizeLink(input.link);
   const { data: created, error } = await supabase.from("cards").insert({
     board_id: boardId,
     section_id: sectionId,
     title: input.title,
     content: input.content ?? "",
-    link: input.link || null,
+    link,
     ...attachmentColumns(input.attachment ?? null),
     author_id: user.id,
     author_name: user.name,
   }).select("id").single();
   if (error || !created) {
-    await removeFiles([input.attachment?.path]);
+    await removeFiles([input.attachment?.path, input.attachment?.thumbPath]);
     return { error: DENIED };
   }
-  fillLinkImage(created.id, boardId, input.link);
+  fillLinkImage(created.id, boardId, link);
   return changed(boardId);
 }
 
@@ -120,38 +144,39 @@ export async function updateCard(cardId: string, input: CardInput): Promise<Acti
   const user = await getSessionUser();
   if (!user) return { error: DENIED };
   const supabase = await createClient();
-  const { data: before } = await supabase.from("cards").select("board_id, attachment_path, link").eq("id", cardId).maybeSingle();
+  const { data: before } = await supabase.from("cards").select("board_id, attachment_path, attachment_thumb_path, link").eq("id", cardId).maybeSingle();
   if (!before || !ownUpload(before.board_id, user.id, input.attachment)) return { error: DENIED };
 
-  const linkChanged = (input.link || null) !== before.link;
+  const link = normalizeLink(input.link);
+  const linkChanged = link !== before.link;
   const { data, error } = await supabase
     .from("cards")
     .update({
       title: input.title,
       content: input.content ?? "",
-      link: input.link || null,
+      link,
       ...(linkChanged ? { link_image: null } : {}),
       ...(input.attachment !== undefined ? attachmentColumns(input.attachment) : {}),
     })
     .eq("id", cardId)
     .select("id");
   if (error || !data?.length) {
-    await removeFiles([input.attachment?.path]);
+    await removeFiles([input.attachment?.path, input.attachment?.thumbPath]);
     return { error: DENIED };
   }
   // 첨부를 바꾸거나 지웠으면 이전 파일을 지운다
   if (input.attachment !== undefined && before.attachment_path !== input.attachment?.path) {
-    await removeFiles([before.attachment_path]);
+    await removeFiles([before.attachment_path, before.attachment_thumb_path]);
   }
-  if (linkChanged) fillLinkImage(cardId, before.board_id, input.link);
+  if (linkChanged) fillLinkImage(cardId, before.board_id, link);
   return changed(before.board_id);
 }
 
 export async function deleteCard(cardId: string): Promise<ActionResult> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("cards").delete().eq("id", cardId).select("board_id, attachment_path");
+  const { data, error } = await supabase.from("cards").delete().eq("id", cardId).select("board_id, attachment_path, attachment_thumb_path");
   if (error || !data?.length) return { error: DENIED };
-  await removeFiles(data.map((c) => c.attachment_path));
+  await removeFiles(data.flatMap((c) => [c.attachment_path, c.attachment_thumb_path]));
   return changed(data[0].board_id);
 }
 
@@ -159,9 +184,9 @@ export async function deleteCard(cardId: string): Promise<ActionResult> {
 export async function deleteCards(cardIds: string[]): Promise<ActionResult> {
   if (!cardIds.length) return {};
   const supabase = await createClient();
-  const { data, error } = await supabase.from("cards").delete().in("id", cardIds).select("board_id, attachment_path");
+  const { data, error } = await supabase.from("cards").delete().in("id", cardIds).select("board_id, attachment_path, attachment_thumb_path");
   if (error || !data?.length) return { error: DENIED };
-  await removeFiles(data.map((c) => c.attachment_path));
+  await removeFiles(data.flatMap((c) => [c.attachment_path, c.attachment_thumb_path]));
   await notifyBoards([...new Set(data.map((c) => c.board_id))]);
   refresh();
   return data.length < cardIds.length ? { error: `${cardIds.length - data.length}개는 지우지 못했어요.` } : {};
@@ -265,7 +290,7 @@ export async function getAttachmentDownloadUrl(cardId: string) {
 
 // 링크 미리보기 이미지는 응답을 보낸 뒤에 찾아 넣는다. 저장이 링크 사이트 응답을 기다리지 않게 하기 위함.
 // 그 사이 링크가 또 바뀌었으면 넣지 않는다. 카드 권한은 저장할 때 이미 RLS로 확인했다.
-function fillLinkImage(cardId: string, boardId: string, link: string | undefined) {
+function fillLinkImage(cardId: string, boardId: string, link: string | null) {
   if (!link) return;
   after(async () => {
     const image = await findLinkImage(link);

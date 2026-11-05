@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Link2, Lock } from "lucide-react";
 import Notice from "@/components/app/Notice";
 import { Badge } from "@/components/ui/badge";
+import { holdUntilLabel } from "@/lib/education";
 import type { Company } from "@/lib/types";
 
 // admin: 전체 교육 / client: 고객사 담당자, 열람 권한이 있는 교육 / instructor: 강사, 배정된 보드로 가는 경로만
@@ -84,5 +85,14 @@ export function CopyUrlButton({ boardId, className = "" }: { boardId: string; cl
       {copied ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
       {copied ? "복사됨" : "URL 복사"}
     </button>
+  );
+}
+
+// axhub에서 사라졌지만 카드가 있어 보관 중인 교육 (PLAN.md 3.1절)
+export function RemovedBadge({ removedAt }: { removedAt: string }) {
+  return (
+    <Badge variant="destructive" className="shrink-0" title="axhub에서 삭제됐어요. 필요한 자료는 그 전에 내려받아 주세요.">
+      axhub에서 삭제됨 · {holdUntilLabel(removedAt)} 영구 삭제
+    </Badge>
   );
 }

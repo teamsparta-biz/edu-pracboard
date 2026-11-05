@@ -33,7 +33,8 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: env("NEXT_PUBLIC_SUPABASE_URL"),
       NEXT_PUBLIC_SUPABASE_ANON_KEY: env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
       SUPABASE_SERVICE_ROLE_KEY: env("SUPABASE_SERVICE_ROLE_KEY"),
-      AXHUB_DATABASE_URL: env("AXHUB_DATABASE_URL"),
+      // axhub 대신 E2E DB의 가짜 pracboard 스키마를 읽는다 (sync.spec.ts가 만든다). 실제 axhub는 E2E에서 읽지 않는다.
+      AXHUB_DATABASE_URL: env("DATABASE_URL"),
       CRON_SECRET: env("CRON_SECRET"),
       TEST_LOGIN_SECRET: env("TEST_LOGIN_SECRET"),
     },

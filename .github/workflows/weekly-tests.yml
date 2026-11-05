@@ -29,7 +29,7 @@ jobs:
         run: npm run test:rls
 
       # playwright.config.ts와 마이그레이션 스크립트가 .env.e2e를 읽는다.
-      # AXHUB_DATABASE_URL은 비워 둔다 (E2E에서 axhub 동기화를 돌리지 않는다).
+      # AXHUB_DATABASE_URL은 비워 둔다. E2E는 실제 axhub 대신 E2E DB의 가짜 pracboard 스키마를 읽는다 (sync.spec.ts).
       - name: .env.e2e 만들기
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}

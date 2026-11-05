@@ -8,10 +8,12 @@ import { ADMIN_DOMAIN, getOrigin } from "@/lib/auth";
 // 로그인 방식 (PLAN.md 2.1절)
 //   관리자(@teamsparta.co) : Google
 //   그 외 모든 주체        : 이메일만 입력. 비밀번호·메일 인증 없음 (감수한 위험, PLAN.md 2.1절)
-// 이메일만으로 로그인하는 방식은 서버에서 service role로 로그인 토큰을 만들어 바로 세션으로 바꾼다.
+// 이메일만으로 로그인하는 방식은 서버에서 service role로 로그인 토큰을 만들어 주고,
+// 브라우저가 그 토큰을 세션으로 바꾼다 (verifyInBrowser). 그 뒤 finishSignIn·joinBoard로 이동한다.
 
 // values: 에러 후 폼을 다시 채우기 위한 입력값
-export type FormResult = { error?: string; values?: { name?: string; email?: string } };
+// tokenHash: 브라우저가 세션으로 바꿀 로그인 토큰
+export type FormResult = { error?: string; values?: { name?: string; email?: string }; tokenHash?: string };
 
 const normalizeEmail = (v: FormDataEntryValue | null) => String(v ?? "").trim().toLowerCase();
 const isEmail = (v: string) => /^\S+@\S+\.\S+$/.test(v);
@@ -23,7 +25,6 @@ const FAILED = "요청을 처리하지 못했어요. 잠시 후 다시 시도해
 // 로그인 화면. 계정이 있거나, 관리자가 고객사 담당자·강사로 등록한 이메일이면 들어온다.
 export async function signInWithEmail(_: FormResult, formData: FormData): Promise<FormResult> {
   const email = normalizeEmail(formData.get("email"));
-  const next = safeNext(formData.get("next"));
   const values = { email };
   if (!isEmail(email)) return { error: "이메일 형식을 확인해 주세요.", values };
   if (isAdminEmail(email)) return { error: ADMIN_USE_GOOGLE, values };
@@ -36,9 +37,14 @@ export async function signInWithEmail(_: FormResult, formData: FormData): Promis
     };
   }
   if (!(await ensureUser(admin, email))) return { error: FAILED, values };
-  if (!(await startSession(email))) return { error: FAILED, values };
+  const tokenHash = await issueToken(email);
+  if (!tokenHash) return { error: FAILED, values };
+  return { tokenHash, values };
+}
 
-  // 보드 URL에서 로그인했으면 그 보드로 돌아가 참여시킨다.
+// 브라우저가 세션을 만든 뒤. 보드 URL에서 로그인했으면 그 보드로 돌아가 참여시킨다.
+export async function finishSignIn(from: string) {
+  const next = safeNext(from);
   if (next.startsWith("/b/")) await joinBoardById(next.slice(3));
   redirect(next);
 }
@@ -48,9 +54,8 @@ export type EnterResult = FormResult & { needName?: boolean };
 
 // 보드 URL의 입장 화면. 이메일을 먼저 받는다.
 // 이미 계정이 있거나 강사·고객사 담당자로 등록된 이메일이면 바로 들어가고,
-// 처음 보는 이메일이면 이름을 받아 계정을 만든다. 어느 쪽이든 들어온 보드에 참여한다.
+// 처음 보는 이메일이면 이름을 받아 계정을 만든다. 세션이 생기면 화면이 joinBoard로 보드에 참여시킨다.
 export async function enterBoard(_: EnterResult, formData: FormData): Promise<EnterResult> {
-  const boardId = String(formData.get("boardId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const email = normalizeEmail(formData.get("email"));
   const values = { name, email };
@@ -61,10 +66,10 @@ export async function enterBoard(_: EnterResult, formData: FormData): Promise<En
   if (!known && !name) return { needName: true, values };
 
   if (!(await ensureUser(createAdminClient(), email, name || undefined))) return { error: FAILED, values };
-  if (!(await startSession(email))) return { error: FAILED, values };
-
-  await joinBoardById(boardId);
-  redirect(`/b/${boardId}`);
+  // 처음 보는 이메일이면 계정은 이미 만들어졌으므로, 실패 후 다시 누를 때 이름을 또 묻지 않는다
+  const tokenHash = await issueToken(email);
+  if (!tokenHash) return { error: FAILED, values };
+  return { tokenHash, values };
 }
 
 export async function signInWithGoogle(formData: FormData) {
@@ -126,16 +131,19 @@ async function ensureUser(admin: ReturnType<typeof createAdminClient>, email: st
   return !error;
 }
 
-// 로그인 토큰을 발급해 곧바로 세션 쿠키로 바꾼다. 메일은 보내지 않는다.
-async function startSession(email: string) {
-  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "magiclink", email });
-  if (error || !data.properties?.hashed_token) return false;
+// 회사 방화벽 등으로 브라우저가 Supabase에 닿지 못할 때만 서버가 대신 세션으로 바꾼다 (verifyInBrowser).
+// 토큰을 가진 사람만 부를 수 있으므로 브라우저에서 확인하는 것과 권한이 같다.
+export async function verifyOnServer(tokenHash: string) {
   const supabase = await createClient();
-  const { error: verifyError } = await supabase.auth.verifyOtp({
-    token_hash: data.properties.hashed_token,
-    type: "magiclink",
-  });
-  return !verifyError;
+  const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
+  if (!error) return null;
+  return error.status === 429 ? "지금 접속하는 사람이 많아요. 잠시 뒤에 다시 눌러 주세요." : FAILED;
+}
+
+// 로그인 토큰을 발급한다. 메일은 보내지 않는다.
+async function issueToken(email: string) {
+  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "magiclink", email });
+  return error ? null : (data.properties?.hashed_token ?? null);
 }
 
 // 외부 주소로 보내는 오픈 리디렉트를 막는다.

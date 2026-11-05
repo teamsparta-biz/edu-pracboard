@@ -14,7 +14,7 @@ import {
   updateLesson,
   updateRound,
 } from "@/app/actions/admin";
-import { educationStatusLabel, educationTitle, roundLabel } from "@/lib/education";
+import { educationStatusLabel, educationTitle, holdUntilLabel, roundLabel } from "@/lib/education";
 import type { Board, Company, Division, Education, EducationBoard, Lesson, Round } from "@/lib/types";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import LessonForm from "@/components/board/LessonForm";
@@ -28,6 +28,7 @@ import {
   CopyUrlButton,
   PageContainer,
   ReadOnlyBadge,
+  RemovedBadge,
   basePath,
   boardPath,
   educationPath,
@@ -75,6 +76,7 @@ function Header({
   description,
   company,
   status,
+  removedAt,
   onCreate,
   createLabel,
   error,
@@ -85,6 +87,7 @@ function Header({
   description?: string;
   company?: Company;
   status?: string;
+  removedAt?: string;
   onCreate?: () => void;
   createLabel?: string;
   error?: string;
@@ -99,6 +102,7 @@ function Header({
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1>
           {mode === "client" && <ReadOnlyBadge />}
           {statusLabel && <Badge variant={status === "stopped" ? "destructive" : "secondary"}>{statusLabel}</Badge>}
+          {removedAt && <RemovedBadge removedAt={removedAt} />}
         </div>
         {description && <p className="mt-2 text-muted-foreground">{description}</p>}
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
@@ -211,6 +215,7 @@ export function RoundList({
         title={educationTitle(education.name)}
         company={education.company}
         status={education.status}
+        removedAt={education.removedAt}
         onCreate={education.synced ? undefined : () => setFormOpen(true)}
         createLabel="회차 만들기"
         error={error}
@@ -336,7 +341,13 @@ function EducationBoards({
               href={boardPath(b.id)}
               order={b.synced ? <CalendarRange className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
               title={b.name}
-              description={[b.synced ? "기간형" : "", b.description].filter(Boolean).join(" · ")}
+              description={[
+                b.removedAt ? `axhub에서 삭제된 차시 · ${holdUntilLabel(b.removedAt)}에 영구 삭제` : "",
+                b.synced ? "기간형" : "",
+                b.description,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
               meta={
                 <>
                   <LayoutGrid className="w-3.5 h-3.5" /> 자료 {b.cardCount}

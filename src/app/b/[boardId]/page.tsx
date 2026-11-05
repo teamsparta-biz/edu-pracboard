@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Lock, LogIn } from "lucide-react";
 import { joinBoard } from "@/app/actions/auth";
 import { addInstructor, removeInstructor } from "@/app/actions/admin";
@@ -23,6 +24,8 @@ const boardTitle = ({ round, lesson, division, education, educationBoard }: Boar
 // 최소 단위 교육의 고유 URL. 강사·교육생은 이 화면만 본다.
 export default async function BoardPage({ params }: PageProps<"/b/[boardId]">) {
   const { boardId } = await params;
+  // 메신저가 URL 뒤의 괄호·마침표·공백까지 링크로 잡는 경우가 있다. 앞부분이 보드 id면 그 보드로 보낸다.
+  if (!isUuid(boardId) && isUuid(boardId.slice(0, 36))) redirect(`/b/${boardId.slice(0, 36)}`);
   // 서울 DB까지 왕복이 여러 번이므로 서로 기다릴 필요 없는 조회는 한꺼번에 보낸다.
   // 로그인하지 않았거나 권한이 없으면 RLS가 빈 결과를 돌려줄 뿐이다.
   const valid = isUuid(boardId);

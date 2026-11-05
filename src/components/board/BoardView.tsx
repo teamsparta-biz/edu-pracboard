@@ -7,6 +7,7 @@ import {
   addComment,
   addSection,
   createUpload,
+  deleteUpload,
   deleteCard,
   deleteCards,
   deleteComment,
@@ -20,6 +21,7 @@ import {
 } from "@/app/actions/board";
 import { createClient } from "@/lib/supabase/client";
 import { CARD_IMAGE_BUCKET, MAX_ATTACHMENT_BYTES, formatBytes } from "@/lib/storage";
+import { makeThumbnail } from "@/lib/thumbnail";
 import type { BoardContext } from "@/lib/data";
 import type { BoardRole, Card, Comment, Section } from "@/lib/types";
 import { educationTitle, roundLabel } from "@/lib/education";
@@ -302,14 +304,32 @@ export default function BoardView({
   }
 
   // 파일은 브라우저에서 Storage로 바로 올리고, 카드에는 경로만 저장한다.
+  // 사진이면 보드 목록용 작은 이미지도 함께 올린다. 실패해도 원본만으로 카드를 만든다.
   async function upload(file: File): Promise<AttachmentInput | { error: string }> {
     const target = await createUpload(board.id, file.name, file.size);
     if (target.error || !target.path || !target.token) return { error: target.error ?? "파일을 올리지 못했어요." };
+    const [{ error }, thumbPath] = await Promise.all([
+      createClient()
+        .storage.from(CARD_IMAGE_BUCKET)
+        .uploadToSignedUrl(target.path, target.token, file, { contentType: file.type || undefined }),
+      uploadThumbnail(file),
+    ]);
+    if (error) {
+      if (thumbPath) await deleteUpload(board.id, thumbPath);
+      return { error: "파일을 올리지 못했어요." };
+    }
+    return { path: target.path, name: file.name, type: file.type, size: file.size, thumbPath };
+  }
+
+  async function uploadThumbnail(file: File) {
+    const thumb = await makeThumbnail(file);
+    if (!thumb) return undefined;
+    const target = await createUpload(board.id, thumb.type === "image/webp" ? "thumb.webp" : "thumb.jpg", thumb.size);
+    if (target.error || !target.path || !target.token) return undefined;
     const { error } = await createClient()
       .storage.from(CARD_IMAGE_BUCKET)
-      .uploadToSignedUrl(target.path, target.token, file, { contentType: file.type || undefined });
-    if (error) return { error: "파일을 올리지 못했어요." };
-    return { path: target.path, name: file.name, type: file.type, size: file.size };
+      .uploadToSignedUrl(target.path, target.token, thumb, { contentType: thumb.type });
+    return error ? undefined : target.path;
   }
 
   function handleCardForm(data: CardFormData) {

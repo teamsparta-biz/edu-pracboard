@@ -17,6 +17,7 @@ const toEducation = (row: any): Education => ({
   company: toCompany(row.company),
   status: row.status ?? undefined,
   synced: !!row.axhub_course_id,
+  removedAt: row.axhub_missing_since ?? undefined,
 });
 
 const toRound = (row: any): Round => ({
@@ -54,11 +55,12 @@ const toEducationBoard = (row: any): EducationBoard => ({
   name: row.name ?? "",
   description: row.description ?? "",
   synced: !!row.axhub_window_course_id,
+  removedAt: row.axhub_missing_since ?? undefined,
   cardCount: countOf(row.cards),
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-const EDUCATION_COLUMNS = "id, name, status, axhub_course_id, company:companies(id, name)";
+const EDUCATION_COLUMNS = "id, name, status, axhub_course_id, axhub_missing_since, company:companies(id, name)";
 
 export async function listEducations() {
   const supabase = await createClient();
@@ -80,7 +82,7 @@ export async function getEducationWithRounds(educationId: string) {
     // 차시 없이 교육에 바로 붙은 보드 (기간형 보드가 먼저, 그다음 만든 순서)
     supabase
       .from("boards")
-      .select("id, name, description, axhub_window_course_id, cards(count)")
+      .select("id, name, description, axhub_window_course_id, axhub_missing_since, cards(count)")
       .eq("education_id", educationId)
       .is("lesson_id", null)
       .order("axhub_window_course_id", { ascending: true, nullsFirst: false })
@@ -172,7 +174,7 @@ export async function listInstructors(boardId: string) {
 }
 
 const BOARD_CONTEXT_COLUMNS = `
-  id, lesson_id, division_id, name, description, axhub_window_course_id,
+  id, lesson_id, division_id, name, description, axhub_window_course_id, axhub_missing_since,
   lesson:lessons(id, round_id, position, description, axhub_key, round:rounds(*)),
   division:divisions(id, lesson_id, position, name),
   education:educations(${EDUCATION_COLUMNS})
@@ -242,7 +244,7 @@ export async function getBoardContents(boardId: string) {
   }
 
   // 첨부 파일은 비공개 버킷에 있다. 이미 RLS로 카드 열람 권한을 확인했으므로 서명 URL을 발급한다.
-  const signed = await signedUrls((cards ?? []).map((c) => c.attachment_path).filter(Boolean) as string[]);
+  const signed = await signedUrls((cards ?? []).flatMap((c) => [c.attachment_path, c.attachment_thumb_path]).filter(Boolean) as string[]);
 
   return {
     ...toBoardContext(board),
@@ -259,6 +261,7 @@ export async function getBoardContents(boardId: string) {
           c.attachment_path && signed.has(c.attachment_path)
             ? {
                 url: signed.get(c.attachment_path)!,
+                thumbUrl: c.attachment_thumb_path ? signed.get(c.attachment_thumb_path) : undefined,
                 name: c.attachment_name ?? "첨부 파일",
                 type: c.attachment_type ?? "application/octet-stream",
                 size: c.attachment_size ?? undefined,
